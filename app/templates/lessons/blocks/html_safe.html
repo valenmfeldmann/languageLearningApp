@@ -1,0 +1,45 @@
+{# expects b (or block) with payload_json.html already sanitized server-side #}
+{% set _b = (block if block is defined else b) %}
+{% set p = _b.payload_json or {} %}
+
+<div class="lesson-block lesson-block-html-safe" style="border:1px solid #ddd; border-radius:8px; padding:10px;">
+  <div style="font-size:12px; opacity:0.7; margin-bottom:6px;">
+    Custom HTML block
+  </div>
+
+  <iframe
+    class="html-safe-iframe"
+    sandbox="allow-same-origin"
+    srcdoc="{{ (p.get('html','')) | e }}"
+    style="width:100%; border:0; display:block; overflow:hidden;"
+    loading="lazy"
+  ></iframe>
+</div>
+
+<script>
+(function(){
+  function resizeIframe(ifr){
+    try {
+      const doc = ifr.contentDocument;
+      if (!doc) return;
+      const h = Math.max(
+        doc.body ? doc.body.scrollHeight : 0,
+        doc.documentElement ? doc.documentElement.scrollHeight : 0
+      );
+      ifr.style.height = (h + 8) + "px";
+    } catch(e) {}
+  }
+
+  const iframes = document.querySelectorAll("iframe.html-safe-iframe");
+  iframes.forEach(ifr => {
+    ifr.addEventListener("load", () => resizeIframe(ifr));
+    // srcdoc sometimes needs a tiny delay
+    setTimeout(() => resizeIframe(ifr), 50);
+    setTimeout(() => resizeIframe(ifr), 250);
+  });
+
+  window.addEventListener("resize", () => {
+    iframes.forEach(ifr => resizeIframe(ifr));
+  });
+})();
+</script>

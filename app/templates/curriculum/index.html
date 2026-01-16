@@ -1,0 +1,50 @@
+{% extends "base.html" %}
+{% block title %}Curriculums{% endblock %}
+
+{% block content %}
+  <h1>Curriculums</h1>
+
+  <form method="GET" action="{{ url_for('main.curriculum_index') }}" style="margin: 12px 0; display:flex; gap:8px; flex-wrap:wrap;">
+    <input
+      type="text"
+      name="q"
+      value="{{ q or '' }}"
+      placeholder="Search title / description…"
+      style="width: 280px; max-width: 100%;">
+
+    <select name="subject">
+      <option value="">All subjects</option>
+      {% for s in subjects %}
+        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
+          {{ s.name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <select name="scope">
+      <option value="mine" {% if scope == "mine" %}selected{% endif %}>Mine</option>
+      <option value="published" {% if scope == "published" %}selected{% endif %}>Published</option>
+      <option value="all" {% if scope == "all" %}selected{% endif %}>Mine + Published</option>
+    </select>
+
+    <button type="submit">Go</button>
+  </form>
+
+  {% if curriculums and curriculums|length > 0 %}
+    <ul>
+      {% for c in curriculums %}
+        <li style="margin: 10px 0;">
+          <a href="{{ url_for('main.curriculum_view', curriculum_code=c.code) }}">{{ c.title }}</a>
+          {% if not c.is_published %}
+            <span style="opacity:0.65; font-size: 12px; margin-left: 6px;">(draft)</span>
+          {% endif %}
+          {% if c.description %}
+            <div style="opacity:0.8; margin-top:4px;">{{ c.description }}</div>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% else %}
+    <p style="opacity:0.8; font-style: italic;">No curriculums found.</p>
+  {% endif %}
+{% endblock %}

@@ -1,0 +1,37 @@
+{# app/templates/lessons/macros/typed.html #}
+
+{% macro render_typed(val, lesson_id) %}
+  {# "val" can be:
+     - plain string
+     - {"kind":"text","value":"..."}
+     - {"kind":"image","value":"assets/foo.jpg"}
+     - {"kind":"video","value":"assets/foo.mp4"}  # optional
+  #}
+
+  {% if val is mapping %}
+    {% set k = val.get("kind", "text") %}
+    {% set v = val.get("value", "") %}
+
+    {% if k == "text" %}
+      {{ v }}
+
+    {% elif k == "image" %}
+      <img
+        src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
+        alt=""
+        style="max-width: 100%; height: auto; border-radius: 10px; display: block;"
+      />
+
+    {% elif k == "video" %}
+      <video controls style="max-width: 100%; border-radius: 10px; display: block;">
+        <source src="{{ url_for('main.lesson_asset', lesson_id=lesson_id, path=v) }}">
+      </video>
+
+    {% else %}
+      {{ v }}
+    {% endif %}
+
+  {% else %}
+    {{ val }}
+  {% endif %}
+{% endmacro %}

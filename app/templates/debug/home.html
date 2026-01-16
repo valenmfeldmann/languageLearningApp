@@ -1,0 +1,149 @@
+{% extends "base.html" %}
+
+{% block content %}
+<style>
+    /* We keep the specific styles for the debug cockpit layout here */
+    .wrap-debug { max-width: 1100px; margin: 0 auto; padding: 24px 16px; }
+    .debug-header { margin: 0 0 20px; border-bottom: 2px solid #eee; padding-bottom: 10px; }
+    .debug-grid { display: grid; grid-template-columns: 1fr; gap: 14px; }
+    .debug-card { border: 1px solid #e6e6e6; border-radius: 14px; padding: 18px; background: #fff; }
+    .debug-card h3 { margin-top: 0; color: #111; border-bottom: 1px solid #f0f0f0; padding-bottom: 8px; }
+    
+    .row { display: flex; gap: 14px; flex-wrap: wrap; margin-bottom: 4px; }
+    .k { color: #666; width: 220px; font-weight: 500; }
+    .v { font-variant-numeric: tabular-nums; font-family: monospace; }
+    
+    .debug-table-wrapper { overflow-x: auto; margin-top: 15px; }
+    table { width: 100%; border-collapse: collapse; font-size: 13px; }
+    th, td { text-align: left; padding: 8px; border-top: 1px solid #eee; }
+    th { background: #fafafa; color: #666; }
+    
+    code { background: #f0f0f0; padding: 2px 6px; border-radius: 4px; font-size: 0.9em; }
+    .warn { color: #b45309; background: #fffbeb; padding: 2px 6px; border-radius: 4px; font-weight: 700; }
+</style>
+
+<div class="wrap-debug">
+    <h1 class="debug-header">Debug Cockpit</h1>
+
+    <div class="debug-grid">
+      <div class="debug-card">
+        <h3>User</h3>
+        <div class="row"><div class="k">id</div><div class="v"><code>{{ user.id }}</code></div></div>
+        <div class="row"><div class="k">email</div><div class="v">{{ user.email }}</div></div>
+        <div class="row"><div class="k">stripe_customer_id</div><div class="v"><code>{{ user.stripe_customer_id or "—" }}</code></div></div>
+        <div class="row"><div class="k">stripe_balance_cents (raw)</div><div class="v">{{ user.stripe_balance_cents }}</div></div>
+      </div>
+
+      <div class="debug-card">
+        <h3>Subscription</h3>
+        {% if sub %}
+          <div class="row"><div class="k">status</div><div class="v">{{ sub.status }}</div></div>
+          <div class="row"><div class="k">plan</div><div class="v">{{ plan.code if plan else "—" }}</div></div>
+          <div class="row"><div class="k">trial_end</div><div class="v">{{ sub.trial_end or "—" }}</div></div>
+          <div class="row"><div class="k">cancel_at</div><div class="v">{{ sub.cancel_at or "—" }}</div></div>
+        {% else %}
+          <div class="warn">No subscription row found in database.</div>
+        {% endif %}
+      </div>
+
+      <div class="debug-card">
+        <h3>Buddies</h3>
+        <div class="row">
+          <div class="k">cached active_buddy_count</div>
+          <div class="v">{{ cached_buddies }}</div>
+        </div>
+        <div class="row">
+          <div class="k">computed accepted links</div>
+          <div class="v">
+            {{ computed_buddies }}
+            {% if computed_buddies != cached_buddies %}
+              <span class="warn">(MISMATCH)</span>
+            {% endif %}
+          </div>
+        </div>
+
+        <h4>BuddyLinks (latest 50)</h4>
+        <div class="debug-table-wrapper">
+            <table>
+              <thead>
+                <tr><th>id</th><th>requester</th><th>addressee</th><th>status</th><th>created</th><th>accepted</th><th>ended</th></tr>
+              </thead>
+              <tbody>
+                {% for l in buddy_links %}
+                  <tr>
+                    <td>{{ l.id }}</td>
+                    <td><code>{{ l.requester_id }}</code></td>
+                    <td><code>{{ l.addressee_id }}</code></td>
+                    <td>{{ l.status }}</td>
+                    <td>{{ l.created_at }}</td>
+                    <td>{{ l.accepted_at or "" }}</td>
+                    <td>{{ l.ended_at or "" }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </div>
+      </div>
+
+      <div class="debug-card">
+        <h3>Pricing / Credits</h3>
+        <div class="row"><div class="k">base monthly</div><div class="v">
+          {% if base_cents is not none %}${{ "%.2f"|format(base_cents/100.0) }}{% else %}—{% endif %}
+        </div></div>
+        <div class="row"><div class="k">effective monthly</div><div class="v">
+          {% if effective_cents is not none %}${{ "%.2f"|format(effective_cents/100.0) }}{% else %}—{% endif %}
+        </div></div>
+        <div class="row"><div class="k">credit_balance_cents</div><div class="v">${{ "%.2f"|format(credit_balance_cents/100.0) }}</div></div>
+
+        <h4>BillingCreditGrant (latest 30)</h4>
+        <div class="debug-table-wrapper">
+            <table>
+              <thead>
+                <tr><th>created</th><th>months</th><th>amount_cents</th><th>promo</th><th>reason</th><th>stripe_txn</th></tr>
+              </thead>
+              <tbody>
+                {% for g in grants %}
+                  <tr>
+                    <td>{{ g.created_at }}</td>
+                    <td>{{ g.months }}</td>
+                    <td>{{ g.amount_cents }}</td>
+                    <td>{{ g.is_promo }}</td>
+                    <td><code>{{ g.reason }}</code></td>
+                    <td><code>{{ g.stripe_balance_txn_id }}</code></td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </div>
+      </div>
+
+      <div class="debug-card">
+        <h3>Access Notes (Ledger)</h3>
+        <div class="row"><div class="k">wallet account</div><div class="v">
+          {% if wallet %}<code>{{ wallet.id }}</code>{% else %}—{% endif %}
+        </div></div>
+        <div class="row"><div class="k">wallet balance</div><div class="v">{{ wallet_balance if wallet_balance is not none else "—" }}</div></div>
+
+        <h4>Recent wallet entries (latest 50)</h4>
+        <div class="debug-table-wrapper">
+            <table>
+              <thead>
+                <tr><th>created</th><th>txn_id</th><th>delta</th><th>entry_type</th></tr>
+              </thead>
+              <tbody>
+                {% for e in wallet_entries %}
+                  <tr>
+                    <td>{{ e.created_at }}</td>
+                    <td><code>{{ e.txn_id }}</code></td>
+                    <td>{{ e.delta }}</td>
+                    <td>{{ e.entry_type }}</td>
+                  </tr>
+                {% endfor %}
+              </tbody>
+            </table>
+        </div>
+      </div>
+
+    </div>
+</div>
+{% endblock %}

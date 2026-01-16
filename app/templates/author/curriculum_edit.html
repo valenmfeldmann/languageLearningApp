@@ -1,0 +1,276 @@
+{% extends "base.html" %}
+{% block title %}Edit Curriculum{% endblock %}
+
+{% block content %}
+  <div style="display:flex; align-items: baseline; gap: 12px;">
+    <h1 style="margin:0;">Edit curriculum: {{ curriculum.title }}</h1>
+    <a href="{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}" style="font-size: 14px;">
+      View
+    </a>
+  </div>
+
+  <p style="opacity:0.75; margin-top: 8px;">
+    Add phases and lessons. “Repeat” expands a lesson into multiple slots.
+  </p>
+
+  <form method="POST" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+    <div style="margin: 10px 0;">
+      <label for="lesson-filter" style="display:block; opacity:0.8;">Filter lesson dropdowns</label>
+      <input id="lesson-filter" type="text" placeholder="Type to filter lessons…" style="width: 420px; max-width: 100%;">
+    </div>
+
+    <table border="1" cellpadding="8" cellspacing="0" style="width: 100%; max-width: 1100px;">
+      <thead>
+        <tr>
+          <th style="width: 110px;">Type</th>
+          <th>Phase title</th>
+          <th style="width: 330px;">Lesson</th>
+          <th style="width: 90px;">Repeat</th>
+          <th>Note</th>
+          <th style="width: 110px;">Row</th>
+        </tr>
+      </thead>
+
+      <tbody id="items-body">
+        {% for it in items %}
+          <tr class="item-row">
+            <td>
+              <select name="item_type" class="item-type" onchange="syncRow(this)">
+                <option value="phase" {% if it.item_type == "phase" %}selected{% endif %}>phase</option>
+                <option value="lesson" {% if it.item_type == "lesson" %}selected{% endif %}>lesson</option>
+              </select>
+            </td>
+
+            <td>
+              <div class="phase-wrap">
+                <input type="text" name="phase_title" class="phase-title"
+                       value="{{ it.phase_title or '' }}"
+                       placeholder="Phase name"
+                       style="width: 100%;">
+              </div>
+            </td>
+
+            <td>
+              <div class="lesson-wrap">
+                <select name="lesson_id" class="lesson-id" style="width: 100%;">
+                  <option value="">-- choose lesson --</option>
+                  {% for L in lessons %}
+                    <option value="{{ L.id }}" {% if it.lesson_id == L.id %}selected{% endif %}>
+                      {{ L.title }} ({{ L.code }})
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+            </td>
+
+            <td style="text-align:center;">
+              <div class="repeat-wrap">
+                <input type="number" name="repeat" class="repeat"
+                       value="1" min="1" max="50" style="width: 70px;">
+              </div>
+            </td>
+
+            <td>
+              <input type="text" name="note" class="note" value="{{ it.note or '' }}"
+                     placeholder="Optional note" style="width: 100%;">
+            </td>
+
+            <td style="text-align:center;">
+              <button type="button" onclick="removeRow(this)">Remove</button>
+            </td>
+          </tr>
+        {% endfor %}
+      </tbody>
+    </table>
+
+    <div style="margin-top: 12px;">
+      <button type="button" onclick="addPhaseRow()">+ Phase</button>
+      <button type="button" onclick="addLessonRow()">+ Lesson</button>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <button type="submit">Save</button>
+      <a href="{{ url_for('author.curriculum_new_form') }}" style="margin-left: 10px;">New curriculum</a>
+      <a href="{{ url_for('author.import_form') }}" style="margin-left: 10px;">Import lesson</a>
+    </div>
+  </form>
+
+{% endblock %}
+
+{% block scripts %}
+<script>
+  function removeRow(btn) {
+    const tr = btn.closest("tr");
+    if (tr) tr.remove();
+  }
+
+  function syncRow(sel) {
+    const tr = sel.closest("tr");
+    if (!tr) return;
+
+    const type = sel.value;
+
+    const phaseWrap = tr.querySelector(".phase-wrap");
+    const lessonWrap = tr.querySelector(".lesson-wrap");
+    const repeatWrap = tr.querySelector(".repeat-wrap");
+
+    if (!phaseWrap || !lessonWrap || !repeatWrap) return;
+
+    const phaseTitle = tr.querySelector(".phase-title");
+    const lessonSel = tr.querySelector(".lesson-id");
+    const repeat = tr.querySelector(".repeat");
+
+    if (type === "phase") {
+      phaseWrap.style.display = "";
+      lessonWrap.style.display = "none";
+      repeatWrap.style.display = "none";
+
+      // ensure consistent submitted values
+      lessonSel.value = "";
+      repeat.value = "1";
+    } else {
+      phaseWrap.style.display = "none";
+      lessonWrap.style.display = "";
+      repeatWrap.style.display = "";
+
+      phaseTitle.value = "";
+      if (!repeat.value) repeat.value = "1";
+    }
+  }
+
+  function addPhaseRow() {
+    const body = document.getElementById("items-body");
+    body.insertAdjacentHTML("beforeend", phaseRowHtml());
+    // sync last row
+    const last = body.querySelector("tr.item-row:last-child select.item-type");
+    syncRow(last);
+  }
+
+  function addLessonRow() {
+    const body = document.getElementById("items-body");
+    body.insertAdjacentHTML("beforeend", lessonRowHtml());
+    const last = body.querySelector("tr.item-row:last-child select.item-type");
+    syncRow(last);
+  }
+
+  function phaseRowHtml() {
+    return `
+      <tr class="item-row">
+        <td>
+          <select name="item_type" class="item-type" onchange="syncRow(this)">
+            <option value="phase" selected>phase</option>
+            <option value="lesson">lesson</option>
+          </select>
+        </td>
+
+        <td>
+          <div class="phase-wrap">
+            <input type="text" name="phase_title" class="phase-title"
+                   value="" placeholder="Phase name" style="width: 100%;">
+          </div>
+        </td>
+
+        <td>
+          <div class="lesson-wrap">
+            <select name="lesson_id" class="lesson-id" style="width: 100%;">
+              <option value="">-- choose lesson --</option>
+              ${lessonOptionsHtml()}
+            </select>
+          </div>
+        </td>
+
+        <td style="text-align:center;">
+          <div class="repeat-wrap">
+            <input type="number" name="repeat" class="repeat" value="1" min="1" max="50" style="width: 70px;">
+          </div>
+        </td>
+
+        <td>
+          <input type="text" name="note" class="note" value="" placeholder="Optional note" style="width: 100%;">
+        </td>
+
+        <td style="text-align:center;">
+          <button type="button" onclick="removeRow(this)">Remove</button>
+        </td>
+      </tr>
+    `;
+  }
+
+  function lessonRowHtml() {
+    return `
+      <tr class="item-row">
+        <td>
+          <select name="item_type" class="item-type" onchange="syncRow(this)">
+            <option value="phase">phase</option>
+            <option value="lesson" selected>lesson</option>
+          </select>
+        </td>
+
+        <td>
+          <div class="phase-wrap">
+            <input type="text" name="phase_title" class="phase-title"
+                   value="" placeholder="Phase name" style="width: 100%;">
+          </div>
+        </td>
+
+        <td>
+          <div class="lesson-wrap">
+            <select name="lesson_id" class="lesson-id" style="width: 100%;">
+              <option value="">-- choose lesson --</option>
+              ${lessonOptionsHtml()}
+            </select>
+          </div>
+        </td>
+
+        <td style="text-align:center;">
+          <div class="repeat-wrap">
+            <input type="number" name="repeat" class="repeat" value="1" min="1" max="50" style="width: 70px;">
+          </div>
+        </td>
+
+        <td>
+          <input type="text" name="note" class="note" value="" placeholder="Optional note" style="width: 100%;">
+        </td>
+
+        <td style="text-align:center;">
+          <button type="button" onclick="removeRow(this)">Remove</button>
+        </td>
+      </tr>
+    `;
+  }
+
+  function lessonOptionsHtml() {
+    // server-rendered options embedded into JS safely
+    return `{% for L in lessons %}<option value="{{ L.id|e }}">{{ (L.title ~ " (" ~ L.code ~ ")")|e }}</option>{% endfor %}`;
+  }
+
+  // Initialize existing rows on load
+  window.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("select.item-type").forEach(syncRow);
+  });
+
+  function applyLessonFilter(text) {
+    const needle = (text || "").trim().toLowerCase();
+    document.querySelectorAll("select.lesson-id").forEach(sel => {
+      Array.from(sel.options).forEach((opt, idx) => {
+        if (idx === 0) { // keep "-- choose lesson --"
+          opt.hidden = false;
+          return;
+        }
+        const hay = (opt.textContent || "").toLowerCase();
+        opt.hidden = (needle && !hay.includes(needle));
+      });
+    });
+  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+    document.querySelectorAll("select.item-type").forEach(syncRow);
+
+    const lf = document.getElementById("lesson-filter");
+    if (lf) {
+      lf.addEventListener("input", () => applyLessonFilter(lf.value));
+    }
+  });
+
+</script>
+{% endblock %}

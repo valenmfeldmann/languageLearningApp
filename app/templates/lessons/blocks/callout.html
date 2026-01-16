@@ -1,0 +1,24 @@
+{% set _b = (block if block is defined else b) %}
+{% set p = _b.payload_json or {} %}
+{% set variant = p.get("variant","note") %}
+{% set title = p.get("title","") %}
+{% set text = p.get("text","") %}
+
+<div class="ll-callout ll-callout-{{ variant|e }}">
+  {% if title %}
+    <div class="ll-callout-title">{{ title }}</div>
+  {% endif %}
+  {% if text %}
+    <div class="ll-callout-text" style="white-space:pre-wrap;">{{ text }}</div>
+  {% endif %}
+</div>
+
+<style>
+  .ll-callout{border:1px solid #ddd; border-left-width:6px; border-radius:10px; padding:10px 12px; margin:10px 0;}
+  .ll-callout-title{font-weight:700; margin-bottom:6px;}
+  .ll-callout-note{border-left-color:#888;}
+  .ll-callout-info{border-left-color:#2b6cb0;}
+  .ll-callout-tip{border-left-color:#2f855a;}
+  .ll-callout-warn{border-left-color:#b7791f;}
+  .ll-callout-danger{border-left-color:#c53030;}
+</style>

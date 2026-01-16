@@ -1,0 +1,128 @@
+{% extends "base.html" %}
+{% block content %}
+<style>
+  .ledger-wrap { max-width: 1200px; margin: 0 auto; padding: 18px; }
+  .ledger-top { display:flex; align-items:flex-end; justify-content:space-between; gap:12px; flex-wrap:wrap; }
+  .ledger-title h1 { margin: 0; }
+  .ledger-sub { opacity: .8; margin-top: 4px; font-size: 13px; }
+  .ledger-filters { display:flex; gap:10px; flex-wrap:wrap; align-items:end; }
+  .ledger-filters label { font-size: 11px; opacity: .8; display:block; margin-bottom:4px; }
+  .ledger-filters select, .ledger-filters input { padding: 6px 8px; border-radius: 8px; border: 1px solid rgba(255,255,255,0.12); background: rgba(0,0,0,0.25); color: inherit; }
+  .ledger-table { width:100%; border-collapse: collapse; margin-top: 12px; }
+  .ledger-table th { text-align:left; font-size: 11px; opacity: .75; padding: 8px 10px; border-bottom: 1px solid rgba(255,255,255,0.12); }
+  .ledger-table td { padding: 7px 10px; border-bottom: 1px solid rgba(255,255,255,0.08); vertical-align: top; font-size: 13px; }
+  .mono { font-family: ui-monospace, SFMono-Regular, Menlo, Monaco, Consolas, "Liberation Mono", "Courier New", monospace; }
+  .pill { display:inline-block; padding: 2px 8px; border-radius: 999px; background: rgba(255,255,255,0.08); font-size: 11px; opacity: .9; }
+  .muted { opacity: .75; }
+  .entries { margin: 6px 0 0 0; padding-left: 18px; }
+  .entries li { margin: 2px 0; font-size: 12px; opacity: .9; }
+  .toggle { cursor:pointer; color: inherit; text-decoration: underline; opacity: .8; font-size: 12px; }
+  .right { text-align:right; }
+</style>
+
+<div class="ledger-wrap">
+  <div class="ledger-top">
+    <div class="ledger-title">
+      <h1>Public Ledger</h1>
+      <div class="ledger-sub">Accounts are masked by default. Your own wallet is shown as <span class="pill">your_wallet</span>.</div>
+    </div>
+
+    <form class="ledger-filters" method="get" action="">
+      {% if logged_in %}
+      <div>
+        <label>Scope</label>
+        <select name="mine">
+          <option value="0" {% if not only_mine %}selected{% endif %}>All activity</option>
+          <option value="1" {% if only_mine %}selected{% endif %}>My transactions</option>
+        </select>
+      </div>
+      {% endif %}
+
+      <div>
+        <label>Event type</label>
+        <select name="event_type">
+          <option value="">Any</option>
+          {% for et in opts.event_types %}
+            <option value="{{ et }}" {% if event_type == et %}selected{% endif %}>{{ et }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Context</label>
+        <select name="context_type">
+          <option value="">Any</option>
+          {% for ct in opts.context_types %}
+            <option value="{{ ct }}" {% if context_type == ct %}selected{% endif %}>{{ ct }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Asset</label>
+        <select name="asset">
+          <option value="">Any</option>
+          {% for ac in opts.asset_codes %}
+            <option value="{{ ac }}" {% if asset_code == ac %}selected{% endif %}>{{ ac }}</option>
+          {% endfor %}
+        </select>
+      </div>
+
+      <div>
+        <label>Limit</label>
+        <input name="limit" value="{{ limit }}" size="5" />
+      </div>
+
+      <div>
+        <button type="submit" style="padding: 7px 10px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.14); background: rgba(255,255,255,0.08); color: inherit;">
+          Apply
+        </button>
+      </div>
+    </form>
+  </div>
+
+  <table class="ledger-table">
+    <thead>
+      <tr>
+        <th style="width: 160px;">Time</th>
+        <th style="width: 220px;">Event</th>
+        <th style="width: 120px;">Actor</th>
+        <th>Summary</th>
+        <th class="right" style="width: 90px;">Details</th>
+      </tr>
+    </thead>
+    <tbody>
+      {% for r in rows %}
+      <tr>
+        <td class="mono muted">{{ r.created_at }}</td>
+        <td>
+          <div class="mono">{{ r.event_type }}</div>
+          {% if r.context_type %}
+            <div class="muted" style="font-size: 12px;">{{ r.context_type }} · <span class="mono">{{ r.context_id }}</span></div>
+          {% endif %}
+        </td>
+        <td><span class="pill">{{ r.actor }}</span></td>
+        <td>
+          <div class="muted" style="font-size: 12px;">{{ r.entries|length }} entries</div>
+          <details>
+            <summary class="toggle">show lines</summary>
+            <ul class="entries">
+              {% for e in r.entries %}
+                <li class="mono">{{ e.account }} · {{ e.asset }} · {{ e.delta_display }} <span class="muted">({{ e.entry_type }})</span></li>
+              {% endfor %}
+            </ul>
+          </details>
+        </td>
+        <td class="right">
+          <a href="/app/ledger/txn/{{ r.txn_id }}" class="mono" style="opacity:.75;">txn</a>
+        </td>
+      </tr>
+      {% endfor %}
+    </tbody>
+  </table>
+
+  {% if rows|length == 0 %}
+    <div style="margin-top: 12px; opacity: .8;">No results for this query.</div>
+  {% endif %}
+</div>
+{% endblock %}

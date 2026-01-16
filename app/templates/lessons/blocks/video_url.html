@@ -1,0 +1,27 @@
+{% set url = b.payload_json.url %}
+
+<div class="lesson-block lesson-block-video">
+  {% if "youtube.com/watch" in url or "youtu.be/" in url %}
+    {% set video_id = None %}
+
+    {% if "youtu.be/" in url %}
+      {% set video_id = url.split("youtu.be/")[1].split("?")[0] %}
+    {% elif "v=" in url %}
+      {% set video_id = url.split("v=")[1].split("&")[0] %}
+    {% endif %}
+
+    {% if video_id %}
+      <iframe
+        width="560"
+        height="315"
+        src="https://www.youtube.com/embed/{{ video_id }}"
+        frameborder="0"
+        allowfullscreen>
+      </iframe>
+    {% else %}
+      <a href="{{ url }}" target="_blank">{{ url }}</a>
+    {% endif %}
+  {% else %}
+    <a href="{{ url }}" target="_blank">{{ url }}</a>
+  {% endif %}
+</div>

@@ -1,0 +1,19 @@
+{
+  "code": "spanish-basics-01",
+  "title": "Spanish Basics 01",
+  "description": "First bites of Spanish.",
+  "language_code": "es",
+  "blocks": [
+    {"type": "markdown", "payload": {"text": "Hola! This is a markdown block."}},
+    {"type": "video_url", "payload": {"url": "https://www.youtube.com/watch?v=hucEIa5SbXU"}},
+    {"type": "quiz_mcq", "payload": {
+      "prompt": "What does 'hola' mean?",
+      "choices": ["Goodbye", "Hello", "Please"],
+      "answer_index": 1,
+      "explanation": "Hola means hello."
+    }}
+  ],
+  "assets": [
+    {"ref": "assets/img1.png", "content_type": "image/png"}
+  ]
+}

@@ -1,0 +1,163 @@
+<!-- templates/app/account.html -->
+{% extends "base.html" %}
+{% block content %}
+<div style="max-width: 760px; margin: 0 auto; padding: 24px;">
+  <h1>Account</h1>
+
+  <div style="margin-top: 16px; padding: 16px; border: 1px solid #ddd; border-radius: 12px;">
+    <h2>Access</h2>
+    <p><b>Has access:</b> {{ "YES" if has_access else "NO" }}</p>
+
+    <p><b>Subscription status:</b>
+      {% if sub %} {{ sub.status }} {% else %} none {% endif %}
+    </p>
+
+    <p><b>Plan:</b>
+      {% if plan %} {{ plan.code }} ({{ plan.monthly_amount_cents }} cents/mo base) {% else %} n/a {% endif %}
+    </p>
+
+    <p><b>Credits (cached):</b> {{ (credit_balance_cents / 100) | round(2) }} USD</p>
+  </div>
+
+  <div style="margin-top: 16px; padding: 16px; border: 1px solid #ddd; border-radius: 12px;">
+    <h2>Buddies</h2>
+
+    <div style="margin-top:12px; display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+      <input id="buddyEmail" placeholder="friend@school.edu"
+             style="padding:10px 12px; border-radius:10px; border:1px solid #333; min-width:260px;">
+      <button id="buddyRequestBtn"
+              style="padding:10px 14px; border-radius:10px; border:1px solid #333; cursor:pointer;">
+        Send buddy request
+      </button>
+      <span id="buddyMsg" style="opacity:.85;"></span>
+    </div>
+
+    <div style="margin-top:14px;">
+      <div style="opacity:.8; margin-bottom:6px;">Your buddy links</div>
+      <div id="buddyList" style="display:flex; flex-direction:column; gap:10px;"></div>
+    </div>
+
+    <script>
+      async function buddyFetchJSON(url, opts) {
+        const resp = await fetch(url, Object.assign({
+          headers: {"Content-Type": "application/json"},
+          credentials: "same-origin",
+        }, opts || {}));
+        let data = null;
+        try { data = await resp.json(); } catch (e) {}
+        if (!resp.ok) {
+          const msg = (data && (data.description || data.error)) || (resp.status + " " + resp.statusText);
+          throw new Error(msg);
+        }
+        return data;
+      }
+
+      function el(tag, attrs, children) {
+        const n = document.createElement(tag);
+        if (attrs) for (const [k,v] of Object.entries(attrs)) {
+          if (k === "style") n.style.cssText = v;
+          else if (k.startsWith("on")) n.addEventListener(k.slice(2), v);
+          else n.setAttribute(k, v);
+        }
+        (children || []).forEach(c => n.appendChild(typeof c === "string" ? document.createTextNode(c) : c));
+        return n;
+      }
+
+      const ME = {{ (current_user.id|tojson) if current_user.is_authenticated else "null" }};
+
+      async function refreshBuddies() {
+        const wrap = document.getElementById("buddyList");
+        wrap.innerHTML = "";
+        const res = await buddyFetchJSON("/buddies/mine", { method: "GET" });
+        const links = (res.links || []);
+
+        if (!links.length) {
+          wrap.appendChild(el("div", {style:"opacity:.7;"}, ["No buddy links yet."]));
+          return;
+        }
+
+        links.forEach(l => {
+          if (!(l.status === "pending" || l.status === "accepted")) return;
+          const isMeAddressee = (l.addressee_id === ME);
+          const isMeRequester = (l.requester_id === ME);
+
+          const title = `${l.status.toUpperCase()} — ${l.requester_id.slice(0,8)} → ${l.addressee_id.slice(0,8)}`;
+
+          const actions = [];
+
+          if (l.status === "pending" && isMeAddressee) {
+            actions.push(el("button", {style:"padding:8px 10px; border:1px solid #333; border-radius:10px; cursor:pointer;",
+              onclick: async () => { await buddyFetchJSON(`/buddies/accept/${l.id}`, {method:"POST"}); await refreshBuddies(); }
+            }, ["Accept"]));
+
+            actions.push(el("button", {style:"padding:8px 10px; border:1px solid #333; border-radius:10px; cursor:pointer; opacity:.9;",
+              onclick: async () => { await buddyFetchJSON(`/buddies/reject/${l.id}`, {method:"POST"}); await refreshBuddies(); }
+            }, ["Reject"]));
+          }
+
+          if (l.status === "pending" && isMeRequester) {
+            actions.push(el("button", {style:"padding:8px 10px; border:1px solid #333; border-radius:10px; cursor:pointer; opacity:.9;",
+              onclick: async () => { await buddyFetchJSON(`/buddies/cancel/${l.id}`, {method:"POST"}); await refreshBuddies(); }
+            }, ["Cancel"]));
+          }
+
+
+          if (l.status === "accepted") {
+            actions.push(el("button", {style:"padding:8px 10px; border:1px solid #333; border-radius:10px; cursor:pointer; opacity:.9;",
+              onclick: async () => { await buddyFetchJSON(`/buddies/end/${l.id}`, {method:"POST"}); await refreshBuddies(); }
+            }, ["End"]));
+          }
+
+          const row = el("div", {style:"padding:12px; border:1px solid #2a2a2a; border-radius:12px; display:flex; justify-content:space-between; gap:10px; align-items:center;"},
+            [
+              el("div", null, [
+                el("div", {style:"font-weight:600;"}, [title]),
+                el("div", {style:"opacity:.7; font-size:12px; margin-top:2px;"}, [
+                  l.created_at ? ("created " + l.created_at) : ""
+                ])
+              ]),
+              el("div", {style:"display:flex; gap:8px; flex-wrap:wrap; justify-content:flex-end;"}, actions)
+            ]
+          );
+
+          wrap.appendChild(row);
+        });
+      }
+
+      document.getElementById("buddyRequestBtn").addEventListener("click", async () => {
+        const msg = document.getElementById("buddyMsg");
+        msg.textContent = "";
+        const email = document.getElementById("buddyEmail").value.trim();
+        if (!email) { msg.textContent = "Enter an email."; return; }
+
+        try {
+          await buddyFetchJSON("/buddies/request_by_email", {
+            method: "POST",
+            body: JSON.stringify({email}),
+          });
+          msg.textContent = "Request sent (or already exists).";
+          document.getElementById("buddyEmail").value = "";
+          await refreshBuddies();
+        } catch (e) {
+          msg.textContent = "Error: " + e.message;
+        }
+      });
+
+      refreshBuddies();
+    </script>
+
+    <p><b>Active buddy count:</b> {{ buddy_count }}</p>
+    <p><b>Discount multiplier:</b> {{ multiplier }}</p>
+
+  </div>
+
+  <div style="margin-top: 16px; display: flex; gap: 12px;">
+    <a href="{{ url_for('billing.pricing') }}" style="padding: 10px 14px; border: 1px solid #222; border-radius: 10px; text-decoration: none;">
+      View Plans
+    </a>
+    <a href="{{ url_for('billing.portal') }}" style="padding: 10px 14px; border: 1px solid #222; border-radius: 10px; text-decoration: none;">
+      Manage Subscription
+    </a>
+  </div>
+</div>
+{% endblock %}

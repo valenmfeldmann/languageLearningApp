@@ -1,0 +1,39 @@
+{% extends "base.html" %}
+{% block content %}
+  <h1>New lesson</h1>
+
+  <form method="post" action="{{ url_for('author.lesson_new_post') }}">
+
+    <label for="subject_code">Subject</label>
+    <select id="subject_code" name="subject_code">
+      <option value="">(none)</option>
+      {% for s in subjects %}
+        <option value="{{ s.code }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+
+    <div>
+      <label>Code</label><br>
+      <input name="code" required placeholder="spanish-basics-01">
+    </div>
+
+    <div style="margin-top:12px;">
+      <label>Title</label><br>
+      <input name="title" required placeholder="Basics 1">
+    </div>
+
+    <div style="margin-top:12px;">
+      <label>Description</label><br>
+      <textarea name="description" rows="3"></textarea>
+    </div>
+
+    <div style="margin-top:12px;">
+      <label>Language code</label><br>
+      <input name="language_code" placeholder="es">
+    </div>
+
+    <div style="margin-top:12px;">
+      <button type="submit">Create</button>
+    </div>
+  </form>
+{% endblock %}

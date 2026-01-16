@@ -1,0 +1,23 @@
+{% extends "base.html" %}
+{% block content %}
+<div class="container" style="max-width: 800px; margin: 0 auto; padding: 24px;">
+  <h1>Transaction</h1>
+
+  <div class="card" style="padding: 16px;">
+    <div><strong>ID:</strong> {{ txn.txn_id }}</div>
+    <div><strong>Type:</strong> {{ txn.event_type }}</div>
+    <div><strong>Actor:</strong> {{ txn.actor }}</div>
+    <div style="margin-top: 12px;">
+      <strong>Entries</strong>
+      <ul>
+        {% for e in txn.entries %}
+          <li>
+            {{ e.account }} · {{ e.asset }} · {{ e.delta }}
+            <span style="opacity: 0.7;">({{ e.entry_type }})</span>
+          </li>
+        {% endfor %}
+      </ul>
+    </div>
+  </div>
+</div>
+{% endblock %}

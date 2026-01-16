@@ -1,0 +1,815 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% block main_class %}container wide{% endblock %}
+
+<style>
+  .lesson-layout {
+    display: grid;
+    grid-template-columns: 280px minmax(480px, 1.2fr) minmax(420px, 1fr);
+    gap: 22px;
+    align-items: start;
+  }
+
+  .col-left{min-width:240px;}
+  .col-right{min-width:360px;}
+
+  /* IMPORTANT: allow grid item to shrink */
+  .col-mid-wrap{
+    min-width:0;
+    display:grid;
+    grid-template-columns: 1fr 8px;
+  }
+  .col-mid{
+    min-width:0;
+  }
+
+  /* Clamp form controls so they don’t overflow */
+  .col-mid input,
+  .col-mid select,
+  .col-mid textarea{
+    max-width:100%;
+    box-sizing:border-box;
+  }
+
+  /* soften panel borders inside the editor layout */
+  .lesson-layout .panel,
+  .lesson-layout .col-mid,
+  .lesson-layout .col-left,
+  .lesson-layout .col-right {
+    border-color: rgba(233,237,247,.10) !important;
+  }
+
+  /* your resize handle can be less “white bar” */
+  .resize-handle{
+    background: linear-gradient(to bottom,
+      transparent,
+      rgba(233,237,247,.12),
+      transparent
+    ) !important;
+    border-radius: 999px !important;
+    opacity: .7;
+  }
+  .resize-handle:hover{ opacity: 1; }
+
+  .mcq-row{
+    display:flex;
+    gap:10px;
+    align-items:center;
+  }
+
+  .mcq-row > *{
+    min-width:0;       /* THE key line */
+  }
+
+  /* optional: if you’d rather wrap instead of scroll */
+  .mcq-row{
+    flex-wrap: wrap;
+  }
+
+</style>
+
+
+{% macro asset_options_all(assets) %}
+  {% for a in assets %}
+    {% set ct = a.content_type or "" %}
+    {% if ct %}
+      <option value="{{ a.ref }}" data-ct="{{ ct }}">{{ a.ref }}</option>
+    {% endif %}
+  {% endfor %}
+{% endmacro %}
+
+  <h1>Edit lesson: {{ lesson.title }}</h1>
+
+  <div style="margin-bottom:12px;">
+    <button type="button" onclick="copyLLMInstructions()">
+      Copy JSON formatting instructions to clipboard (for LLM assistance)
+    </button>
+    <small id="llmCopyStatus" style="margin-left:8px;"></small>
+  </div>
+
+  <script>
+    async function copyLLMInstructions() {
+      const status = document.getElementById("llmCopyStatus");
+      status.textContent = "";
+
+      // server-rendered context → JS literals
+      const assets = {{ (assets or []) | map(attribute="ref") | list | tojson }};
+      const assetTypes = {{ (assets or []) | map(attribute="content_type") | list | tojson }};
+      const lessonCode = {{ (lesson.code or "") | tojson }};
+      const lessonTitle = {{ (lesson.title or "") | tojson }};
+      const lessonLanguage = {{ (lesson.language_code or "") | tojson }};
+
+      const url = "{{ url_for('static', filename='instructions_for_LLM.txt') }}";
+
+      try {
+        const resp = await fetch(url, { cache: "no-store" });
+        if (!resp.ok) throw new Error("Failed to load instructions (" + resp.status + ")");
+
+        const baseText = await resp.text();
+
+        const assetLines = assets.length
+          ? assets.map((a, i) => `- ${a} (${assetTypes[i] || "unknown"})`).join("\n")
+          : "(none uploaded yet)";
+
+        // This is the “extra context” the LLM needs to produce something usable
+        const contextSection =
+    `\n\n====================
+    CONTEXT (SERVER VARIABLES)
+    ====================
+    lesson.code: ${lessonCode}
+    lesson.title: ${lessonTitle}
+    lesson.language_code: ${lessonLanguage}
+
+    You can reference uploaded assets by exact ref string (e.g. "assets/foo.png").
+    Uploaded assets:
+    ${assetLines}
+
+    ====================
+    LESSON JSON SHAPE (WHAT THE APP EXPECTS)
+    ====================
+    Top-level (example):
+    {
+      "code": "my-lesson-code",
+      "title": "My Lesson Title",
+      "description": "Optional",
+      "language_code": "es",
+      "blocks": [ ... ]
+    }
+
+    Blocks (each):
+    {
+      "type": "markdown" | "video_url" | "video_asset" | "quiz_mcq" | "desmos" | "html_safe",
+      "payload": { ... }
+    }
+
+    Block payload examples:
+
+    markdown:
+    { "text": "Markdown content..." }
+
+    video_url:
+    { "url": "https://...", "caption": "Optional" }
+
+    video_asset:
+    { "ref": "assets/video.mp4", "caption": "Optional", "controls": true, "autoplay": false }
+
+    desmos:
+    { "graph_url": "https://www.desmos.com/calculator/XXXX", "height": 480 }
+
+    quiz_mcq:
+    {
+      "mode": "graded" | "ungraded",
+      "prompt": "text" OR { "kind": "text|image|audio|video", "value": "..." },
+      "choices": [
+        "text choice"
+        OR { "kind": "text|image|audio|video", "value": "..." }
+      ],
+      "correct_indices": [0,2]   // optional multi-correct
+      // OR fallback single-correct:
+      "answer_index": 1
+    }
+
+    html_safe:
+    { "html": "<div>...</div>" }  // HTML is sanitized server-side
+    `;
+
+        const finalText = baseText + contextSection;
+
+        await navigator.clipboard.writeText(finalText);
+        status.textContent = "Copied.";
+      } catch (e) {
+        // fallback
+        try {
+          const ta = document.createElement("textarea");
+          ta.value = "INSTRUCTIONS URL:\n" + url + "\n\n" + (e?.message || e);
+          document.body.appendChild(ta);
+          ta.select();
+          document.execCommand("copy");
+          document.body.removeChild(ta);
+          status.textContent = "Copied (fallback).";
+        } catch (e2) {
+          status.textContent = "Copy failed. Open devtools console.";
+          console.error(e, e2);
+        }
+      }
+    }
+  </script>
+
+
+
+  <script>
+  function ctMatchesKind(ct, kind) {
+    if (!ct) return false;
+    if (kind === "image") return ct.startsWith("image/");
+    if (kind === "audio") return ct.startsWith("audio/");
+    if (kind === "video") return ct.startsWith("video/");
+    // for "text" (or unknown), hide all assets
+    return false;
+  }
+
+  function filterAssetSelect(selectEl, kind) {
+    if (!selectEl) return;
+    const opts = selectEl.querySelectorAll("option[data-ct]");
+    opts.forEach(opt => {
+      const ct = opt.getAttribute("data-ct") || "";
+      opt.hidden = !ctMatchesKind(ct, kind);
+    });
+
+    // If currently selected option is now hidden, reset to blank
+    const selected = selectEl.options[selectEl.selectedIndex];
+    if (selected && selected.hidden) {
+      selectEl.value = "";
+    }
+  }
+
+  document.addEventListener("DOMContentLoaded", () => {
+    // Prompt
+    const promptKindSel = document.getElementById("prompt_kind");
+    const promptAssetSel = document.getElementById("prompt_asset_select");
+    if (promptKindSel) {
+      filterAssetSelect(promptAssetSel, promptKindSel.value);
+      promptKindSel.addEventListener("change", () => {
+        filterAssetSelect(promptAssetSel, promptKindSel.value);
+      });
+    }
+
+    // Choices
+    document.querySelectorAll('select[id^="choice_kind_"]').forEach(kindSel => {
+      const idx = kindSel.id.split("_").pop();
+      const assetSel = document.getElementById("choice_asset_select_" + idx);
+      filterAssetSelect(assetSel, kindSel.value);
+      kindSel.addEventListener("change", () => {
+        filterAssetSelect(assetSel, kindSel.value);
+      });
+    });
+  });
+  </script>
+
+
+
+  <div id="lessonLayout" class="lesson-layout">
+    <!-- LEFT: blocks -->
+    <div class="col-left">
+      <h3>Blocks</h3>
+
+      <form method="post" action="{{ url_for('author.lesson_block_add', lesson_id=lesson.id) }}">
+        <select name="type">
+          <option value="markdown">markdown</option>
+          <option value="video_url">video_url</option>
+          <option value="video_asset">video_asset</option>
+          <option value="quiz_mcq">quiz_mcq</option>
+          <option value="desmos">desmos</option>
+          <option value="html_safe">html_safe</option>
+          <option value="callout">callout</option>
+          <option value="reveal">reveal</option>
+        </select>
+        <button type="submit">Add</button>
+      </form>
+
+      <ol style="padding-left:18px;">
+        {% for b in blocks %}
+          <li style="margin:8px 0;">
+            <a href="{{ url_for('author.lesson_edit', lesson_id=lesson.id, block_id=b.id) }}">
+              {{ b.type }}
+            </a>
+
+            <form method="post" action="{{ url_for('author.lesson_block_move', lesson_id=lesson.id, block_id=b.id) }}" style="display:inline;">
+              <input type="hidden" name="direction" value="up">
+              <button type="submit">↑</button>
+            </form>
+            <form method="post" action="{{ url_for('author.lesson_block_move', lesson_id=lesson.id, block_id=b.id) }}" style="display:inline;">
+              <input type="hidden" name="direction" value="down">
+              <button type="submit">↓</button>
+            </form>
+
+            <form method="post" action="{{ url_for('author.lesson_block_delete', lesson_id=lesson.id, block_id=b.id) }}" style="display:inline;">
+              <button type="submit" onclick="return confirm('Delete this block?')">✕</button>
+            </form>
+          </li>
+        {% endfor %}
+      </ol>
+
+      <h3>Assets</h3>
+      <form method="post" enctype="multipart/form-data" action="{{ url_for('author.lesson_asset_upload', lesson_id=lesson.id) }}">
+        <input type="file" name="file" required>
+        <button type="submit">Upload</button>
+      </form>
+
+      {% if assets|length > 0 %}
+        <ul>
+          {% for a in assets %}
+            <li><code>{{ a.ref }}</code></li>
+          {% endfor %}
+        </ul>
+      {% endif %}
+    </div>
+
+    <!-- MIDDLE: inspector -->
+
+    <!-- MIDDLE: inspector + resize handle -->
+    <div class="col-mid-wrap">
+      <div class="col-mid">
+        <h3>Lesson metadata</h3>
+
+        <!-- EVERYTHING that used to be in the middle column goes here -->
+  <!--        -->
+        <hr>
+          <details>
+            <summary style="cursor:pointer; font-weight:bold;">
+              Apply full lesson JSON (LLM / power-user)
+            </summary>
+
+            <div style="margin-top:10px;">
+              <form method="post" enctype="multipart/form-data"
+                    action="{{ url_for('author.lesson_apply_json', lesson_id=lesson.id) }}">
+                <div>
+                  <label>Paste lesson JSON</label><br>
+                  <textarea name="lesson_json_text" rows="10" style="width:100%;"
+                            placeholder='{"code":"...","title":"...","blocks":[...]}'></textarea>
+                </div>
+
+                <div style="margin-top:10px;">
+                  <label>or upload lesson.json</label><br>
+                  <input type="file" name="lesson_json" accept="application/json,.json">
+                </div>
+
+                <div style="margin-top:10px;">
+                  <label>assets.zip (optional)</label><br>
+                  <input type="file" name="assets_zip" accept="application/zip,.zip">
+                </div>
+
+                <div style="margin-top:10px;">
+                  <button type="submit" onclick="return confirm('This will replace ALL blocks and assets for this lesson. Continue?')">
+                    Apply JSON (replaces lesson contents)
+                  </button>
+                </div>
+              </form>
+
+            </div>
+        </details>
+
+
+
+  <!---->
+        <form method="post" action="{{ url_for('author.lesson_edit_meta', lesson_id=lesson.id) }}">
+          <div>
+            <label>Title</label><br>
+            <input name="title" value="{{ lesson.title }}">
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Description</label><br>
+            <textarea name="description" rows="3">{{ lesson.description or "" }}</textarea>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Language code</label><br>
+            <input name="language_code" value="{{ lesson.language_code or '' }}">
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>Visibility</label><br>
+            <select name="visibility">
+              <option value="private" {% if lesson.visibility == 'private' %}selected{% endif %}>private</option>
+              <option value="public" {% if lesson.visibility == 'public' %}selected{% endif %}>public</option>
+            </select>
+          </div>
+
+          <div style="margin-top:12px;">
+            <label>
+              <input type="checkbox" name="is_published" {% if lesson.is_published %}checked{% endif %}>
+              Published
+            </label>
+          </div>
+
+          <div style="margin-top:12px;">
+            <button type="submit">Save lesson</button>
+          </div>
+        </form>
+
+        <hr>
+
+  <!--      -->
+        <h3>Block editor</h3>
+        {% if selected_block %}
+          <p><b>{{ selected_block.type }}</b></p>
+
+          {# ---------- FRIENDLY FORM ---------- #}
+          {% if selected_block.type == "markdown" %}
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <label>Markdown text</label><br>
+              <textarea name="text" rows="8" style="width:100%;">{{ (selected_block.payload_json or {}).get('text','') }}</textarea>
+              <div style="margin-top:8px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+
+          {% elif selected_block.type == "video_url" %}
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <label>Video URL</label><br>
+              <input name="url" style="width:100%;" value="{{ selected_block.payload_json.url or "" }}">
+
+              <div style="margin-top:8px;">
+                <label>Caption</label><br>
+                <input name="caption" style="width:100%;" value="{{ selected_block.payload_json.caption or "" }}">
+              </div>
+
+              <div style="margin-top:8px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+
+
+          {% elif selected_block.type == "video_asset" %}
+            {% set p = selected_block.payload_json or {} %}
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <label>Video asset ref</label><br>
+              <input name="ref" id="video_asset_ref" style="width:100%;" value="{{ p.get('ref','') }}">
+
+              <div style="margin-top:6px;">
+                <label>Pick an uploaded video</label><br>
+                <select id="video_asset_select"
+                        onchange="document.getElementById('video_asset_ref').value=this.value;">
+                  <option value="">(select video asset)</option>
+                  {{ asset_options_all(assets) }}
+                </select>
+                <script>
+                  // filter immediately to video/*
+                  document.addEventListener("DOMContentLoaded", () => {
+                    const sel = document.getElementById("video_asset_select");
+                    filterAssetSelect(sel, "video");
+                  });
+                </script>
+              </div>
+
+              <div style="margin-top:8px;">
+                <label>Caption</label><br>
+                <input name="caption" style="width:100%;" value="{{ p.get('caption','') }}">
+              </div>
+
+              <div style="margin-top:8px;">
+                <label><input type="checkbox" name="controls" {% if p.get('controls', True) %}checked{% endif %}> Controls</label>
+                <label style="margin-left:12px;"><input type="checkbox" name="autoplay" {% if p.get('autoplay', False) %}checked{% endif %}> Autoplay</label>
+              </div>
+
+              <div style="margin-top:8px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+
+          {% elif selected_block.type == "desmos" %}
+            {% set p = selected_block.payload_json or {} %}
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <label>Desmos graph URL</label><br>
+              <input name="graph_url" style="width:100%;" value="{{ p.get('graph_url','') }}"
+                     placeholder="https://www.desmos.com/calculator/XXXX">
+
+              <div style="margin-top:8px;">
+                <label>Height (px)</label><br>
+                <input name="height" type="number" min="200" max="1200" value="{{ p.get('height', 480) }}">
+              </div>
+
+              <div style="margin-top:8px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+
+          {% elif selected_block.type == "quiz_mcq" %}
+            {% set payload = selected_block.payload_json or {} %}
+            {% set choices = payload.get("choices", []) %}
+            {% set mode = payload.get("mode", "graded") %}
+            {% set correct_indices = payload.get("correct_indices", None) %}
+
+            {# Normalize prompt into (kind, value) #}
+            {% set p = payload.get("prompt", "") %}
+            {% if p is mapping %}
+              {% set prompt_kind = p.get("kind","text") %}
+              {% set prompt_value = p.get("value","") %}
+            {% else %}
+              {% set prompt_kind = "text" %}
+              {% set prompt_value = p %}
+            {% endif %}
+
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+
+              <div style="margin-bottom:8px;">
+                <button
+                  type="submit"
+                  formaction="{{ url_for('author.mcq_add_choice', lesson_id=lesson.id, block_id=selected_block.id) }}"
+                  formmethod="post"
+                >+ Choice</button>
+              </div>
+
+              <label>Mode</label><br>
+              <select name="mode">
+                <option value="graded" {% if mode == "graded" %}selected{% endif %}>graded</option>
+                <option value="ungraded" {% if mode == "ungraded" %}selected{% endif %}>ungraded (no checking)</option>
+              </select>
+
+              <div style="margin-top:10px;">
+                <label>Prompt type</label><br>
+                <select name="prompt_kind" id="prompt_kind">
+                  <option value="text"  {% if prompt_kind=="text" %}selected{% endif %}>text</option>
+                  <option value="image" {% if prompt_kind=="image" %}selected{% endif %}>image</option>
+                  <option value="audio" {% if prompt_kind=="audio" %}selected{% endif %}>audio</option>
+                  <option value="video" {% if prompt_kind=="video" %}selected{% endif %}>video</option>
+                </select>
+
+                <div style="margin-top:6px;">
+                  <label>Prompt value (text or asset ref like assets/foo.jpg)</label><br>
+                  <input name="prompt_value" id="prompt_value" style="width:100%;" value="{{ prompt_value }}">
+                </div>
+
+                <div style="margin-top:6px;">
+                  <label>Pick an uploaded asset</label><br>
+                  <select id="prompt_asset_select"
+                          onchange="document.getElementById('prompt_value').value=this.value;">
+                    <option value="">(select asset)</option>
+                    {{ asset_options_all(assets) }}
+                  </select>
+                </div>
+              </div>
+
+              <div style="margin-top:12px;">
+                <label>Choices</label>
+
+                {% for c in choices %}
+                  {# Normalize choice into (kind, value) #}
+                  {% if c is mapping %}
+                    {% set ck = c.get("kind","text") %}
+                    {% set cv = c.get("value","") %}
+                  {% else %}
+                    {% set ck = "text" %}
+                    {% set cv = c %}
+                  {% endif %}
+
+                  <div style="border:1px solid #ddd; padding:8px; margin-top:8px; border-radius:6px;">
+                    <div class="mcq-row">
+                      <div>
+                        <label style="display:block;">Type</label>
+                        <select name="choice_{{ loop.index0 }}_kind" id="choice_kind_{{ loop.index0 }}">
+                          <option value="text"  {% if ck=="text" %}selected{% endif %}>text</option>
+                          <option value="image" {% if ck=="image" %}selected{% endif %}>image</option>
+                          <option value="audio" {% if ck=="audio" %}selected{% endif %}>audio</option>
+                          <option value="video" {% if ck=="video" %}selected{% endif %}>video</option>
+                        </select>
+                      </div>
+
+                      <div style="flex:1;">
+                        <label style="display:block;">Value</label>
+                        <input name="choice_{{ loop.index0 }}_value"
+                               id="choice_value_{{ loop.index0 }}"
+                               style="width:100%;"
+                               value="{{ cv }}">
+                        <div style="margin-top:6px;">
+                          <label>Pick an uploaded asset</label><br>
+                          <select id="choice_asset_select_{{ loop.index0 }}"
+                                  onchange="document.getElementById('choice_value_{{ loop.index0 }}').value=this.value;">
+                            <option value="">(select asset)</option>
+                            {{ asset_options_all(assets) }}
+                          </select>
+                        </div>
+                      </div>
+
+                      <div>
+                        <label style="display:block;">Remove</label>
+                        <button
+                          type="submit"
+                          name="idx"
+                          value="{{ loop.index0 }}"
+                          formaction="{{ url_for('author.mcq_remove_choice_at', lesson_id=lesson.id, block_id=selected_block.id) }}"
+                          formmethod="post"
+                          {% if choices|length <= 2 %}disabled{% endif %}
+                        >–</button>
+                      </div>
+
+                      <div>
+                        <label style="display:block;">Correct</label>
+                        <input type="checkbox" name="correct_indices" value="{{ loop.index0 }}"
+                          {% if correct_indices is not none and (loop.index0 in correct_indices) %}checked{% endif %}>
+                      </div>
+                    </div>
+                  </div>
+                {% endfor %}
+              </div>
+
+              <div style="margin-top:10px;">
+                <label>Single-correct answer (used only if no “Correct” boxes checked)</label><br>
+                <select name="answer_index">
+                  {% for _ in choices %}
+                    <option value="{{ loop.index0 }}"
+                      {% if loop.index0 == payload.get('answer_index', 0) %}selected{% endif %}>
+                      Choice {{ loop.index }}
+                    </option>
+                  {% endfor %}
+                </select>
+              </div>
+
+              <div style="margin-top:10px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+        {% elif selected_block.type == "html_safe" %}
+          {% set p = selected_block.payload_json or {} %}
+          <form method="post"
+                action="{{ url_for('author.lesson_block_update_form',
+                                   lesson_id=lesson.id,
+                                   block_id=selected_block.id) }}">
+            <label>HTML (sanitized)</label><br>
+            <div style="margin:8px 0 10px 0;">
+              <button type="button" onclick="copyHtmlSafeInstructions()">
+                Copy HTML-safe instructions for LLM
+              </button>
+              <small id="htmlSafeCopyStatus" style="margin-left:8px;"></small>
+            </div>
+            <textarea name="html" rows="10" style="width:100%;">{{ p.get('html','') }}</textarea>
+            <div style="margin-top:8px;">
+              <button type="submit">Save block</button>
+            </div>
+            <div style="font-size:12px; opacity:0.75; margin-top:6px;">
+              Scripts/inline JS will be stripped. Use this for formatting/layout only.
+            </div>
+          </form>
+
+        {% elif selected_block.type == "callout" %}
+          {% set p = selected_block.payload_json or {} %}
+          <form method="post"
+                action="{{ url_for('author.lesson_block_update_form',
+                                   lesson_id=lesson.id,
+                                   block_id=selected_block.id) }}">
+            <label>Variant</label><br>
+            <select name="variant">
+              {% set v = p.get("variant","note") %}
+              <option value="note"   {% if v=="note" %}selected{% endif %}>note</option>
+              <option value="info"   {% if v=="info" %}selected{% endif %}>info</option>
+              <option value="tip"    {% if v=="tip" %}selected{% endif %}>tip</option>
+              <option value="warn"   {% if v=="warn" %}selected{% endif %}>warn</option>
+              <option value="danger" {% if v=="danger" %}selected{% endif %}>danger</option>
+            </select>
+
+            <div style="margin-top:8px;">
+              <label>Title</label><br>
+              <input name="title" style="width:100%;" value="{{ p.get('title','') }}">
+            </div>
+
+            <div style="margin-top:8px;">
+              <label>Text</label><br>
+              <textarea name="text" rows="6" style="width:100%;">{{ p.get('text','') }}</textarea>
+            </div>
+
+            <div style="margin-top:10px;">
+              <button type="submit">Save block</button>
+            </div>
+          </form>
+
+        {% elif selected_block.type == "reveal" %}
+          {% set p = selected_block.payload_json or {} %}
+          <form method="post"
+                action="{{ url_for('author.lesson_block_update_form',
+                                   lesson_id=lesson.id,
+                                   block_id=selected_block.id) }}">
+
+            <label>Summary (button text)</label><br>
+            <input name="summary" style="width:100%;" value="{{ p.get('summary','Show answer') }}">
+
+            <div style="margin-top:8px;">
+              <label>Hidden text</label><br>
+              <textarea name="text" rows="6" style="width:100%;">{{ p.get('text','') }}</textarea>
+            </div>
+
+            <div style="margin-top:8px;">
+              <label>
+                <input type="checkbox" name="open" {% if p.get('open', False) %}checked{% endif %}>
+                Open by default
+              </label>
+            </div>
+
+            <div style="margin-top:10px;">
+              <button type="submit">Save block</button>
+            </div>
+          </form>
+
+        {% endif %}
+
+          <hr>
+
+          {# ---------- RAW JSON (ADVANCED) ---------- #}
+          <details>
+            <summary>Advanced: edit raw JSON</summary>
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <textarea name="payload_json" rows="12" style="width:100%;">{{ selected_block.payload_json | tojson(indent=2) }}</textarea>
+              <div style="margin-top:8px;">
+                <button type="submit">Save raw JSON</button>
+              </div>
+            </form>
+          </details>
+        {% else %}
+          <p>No blocks yet.</p>
+        {% endif %}
+      </div>
+      <div class="resize-handle" id="resizeHandle" title="Drag to resize"></div>
+    </div>
+
+    <!-- RIGHT: preview -->
+    <div class="col-right">
+      <h3>Preview</h3>
+      <iframe
+        src="{{ url_for('lessons.preview', lesson_id=lesson.id) }}"
+        style="width:100%; height:80vh; border:1px solid #ccc; border-radius:8px;"
+      ></iframe>
+
+      <p style="margin-top:8px;">
+        Learner view: <a href="{{ url_for('main.lesson_page', lesson_code=lesson.code) }}">{{ lesson.code }}</a>
+      </p>
+    </div>
+  </div>
+
+
+<script>
+  (() => {
+    const handle = document.getElementById("resizeHandle");
+    const layout = document.getElementById("lessonLayout");
+    if (!handle || !layout) return;
+
+    let dragging = false;
+
+    handle.addEventListener("mousedown", (e) => {
+      dragging = true;
+      document.body.style.userSelect = "none";
+      e.preventDefault();
+    });
+
+    window.addEventListener("mouseup", () => {
+      dragging = false;
+      document.body.style.userSelect = "";
+    });
+
+    window.addEventListener("mousemove", (e) => {
+      if (!dragging) return;
+
+      const rect = layout.getBoundingClientRect();
+      const x = e.clientX - rect.left;
+
+      const left = 260;
+      const minMid = 340;
+      const maxMid = Math.min(820, rect.width - left - 360);
+      const mid = Math.max(minMid, Math.min(maxMid, x - left));
+
+      layout.style.gridTemplateColumns = `${left}px ${mid}px 1fr`;
+    });
+  })();
+</script>
+<script>
+async function copyHtmlSafeInstructions() {
+  const status = document.getElementById("htmlSafeCopyStatus");
+  if (status) status.textContent = "";
+
+  const url = "{{ url_for('static', filename='instructions_for_LLM_html_safe.txt') }}";
+
+  try {
+    const resp = await fetch(url, { cache: "no-store" });
+    if (!resp.ok) throw new Error("Failed to load instructions (" + resp.status + ")");
+
+    const text = await resp.text();
+    await navigator.clipboard.writeText(text);
+
+    if (status) status.textContent = "Copied.";
+  } catch (e) {
+    // Fallback
+    try {
+      const ta = document.createElement("textarea");
+      ta.value = "INSTRUCTIONS URL:\n" + url + "\n\n" + (e?.message || e);
+      document.body.appendChild(ta);
+      ta.select();
+      document.execCommand("copy");
+      document.body.removeChild(ta);
+
+      if (status) status.textContent = "Copied (fallback).";
+    } catch (e2) {
+      if (status) status.textContent = "Copy failed. Open devtools console.";
+      console.error(e, e2);
+    }
+  }
+}
+</script>
+{% endblock %}
+

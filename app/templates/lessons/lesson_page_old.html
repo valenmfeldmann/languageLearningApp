@@ -1,0 +1,44 @@
+{% for item in block_views %}
+  {% set b = item.b %}
+  <div class="lesson-block" data-block-id="{{ b.id }}">
+    {% include item.tpl %}
+  </div>
+  <hr>
+{% endfor %}
+
+{% if can_complete %}
+  <form method="POST" action="{{ url_for('main.complete_lesson', lesson_code=lesson.code) }}">
+    <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
+    <button type="submit">Complete lesson</button>
+  </form>
+{% else %}
+  <div style="opacity:0.8; font-style: italic;">
+    Complete all quizzes to finish this lesson.
+  </div>
+{% endif %}
+
+<script>
+let currentBlockId = null;
+
+const observer = new IntersectionObserver(entries => {
+  entries.forEach(e => {
+    if (e.isIntersecting) {
+      currentBlockId = e.target.dataset.blockId;
+    }
+  });
+}, { threshold: 0.6 });
+
+document.querySelectorAll(".lesson-block").forEach(el => observer.observe(el));
+
+setInterval(() => {
+  fetch("{{ url_for('main.lesson_heartbeat') }}", {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      attempt_id: "{{ attempt.id }}",
+      lesson_block_id: currentBlockId,
+      seconds_delta: 10,
+    })
+  });
+}, 10000);
+</script>

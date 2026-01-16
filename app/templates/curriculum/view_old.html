@@ -1,0 +1,72 @@
+{% extends "base.html" %}
+{% block title %}{{ curriculum.title }}{% endblock %}
+
+{% block content %}
+  <div style="display:flex; align-items:baseline; gap: 12px;">
+    <h1 style="margin:0;">{{ curriculum.title }}</h1>
+    <a href="{{ url_for('main.curriculum_index') }}" style="font-size: 14px;">← all curriculums</a>
+
+    {% if can_view_analytics %}
+      <a href="{{ url_for('main.curriculum_analytics', curriculum_code=curriculum.code) }}">Analytics</a>
+    {% endif %}
+
+    {% if can_edit %}
+      <a href="{{ url_for('author.curriculum_edit', curriculum_id=curriculum.id) }}">Edit</a>
+    {% endif %}
+  </div>
+
+  {% if curriculum.description %}
+    <p style="opacity:0.85; margin-top: 10px;">{{ curriculum.description }}</p>
+  {% endif %}
+
+  <div style="margin-top: 18px;">
+    <ol style="padding-left: 22px;">
+      {% for it in items %}
+        {% if it.kind == "phase" %}
+          <li style="margin: 16px 0 8px; list-style: none; padding-left: 0;">
+            <h3 style="margin: 0;">{{ it.title }}</h3>
+          </li>
+
+        {% elif it.kind == "lesson" %}
+          <li style="margin: 8px 0;">
+            {% if it.is_done %}
+              <span title="Completed" aria-label="Completed">✅</span>
+            {% else %}
+              <span title="Not completed yet" aria-label="Not completed yet">⬜</span>
+            {% endif %}
+
+            {% if it.lesson %}
+              <a href="{{ url_for('main.lesson_page',
+                                  lesson_code=it.lesson.code,
+                                  src='curriculum_view',
+                                  q=curriculum.code,
+                                  curriculum=curriculum.code,
+                                  pos=loop.index0) }}"
+                 style="margin-left: 8px;">
+                {{ it.lesson.title }}
+              </a>
+              <span style="opacity:0.65; margin-left: 8px; font-size: 12px;">
+                (attempt {{ it.occurrence }})
+              </span>
+            {% else %}
+              <span style="margin-left: 8px; opacity:0.8; font-style: italic;">
+                Missing lesson (deleted?)
+              </span>
+            {% endif %}
+
+            {% if it.note %}
+              <div style="margin-left: 28px; margin-top: 4px; opacity:0.85;">
+                {{ it.note }}
+              </div>
+            {% endif %}
+          </li>
+
+        {% else %}
+          <li style="margin: 8px 0; opacity:0.8; font-style: italic;">
+            Unknown curriculum item
+          </li>
+        {% endif %}
+      {% endfor %}
+    </ol>
+  </div>
+{% endblock %}

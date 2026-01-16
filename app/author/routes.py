@@ -1,0 +1,1646 @@
+# app/author/routes.py
+from __future__ import annotations
+from app.access_ledger.service import (
+    get_curriculum_share_asset,
+    get_or_create_user_wallet,
+    post_access_txn,
+    EntrySpec, get_or_create_system_account,
+)
+
+import json
+import zipfile
+from pathlib import Path
+from typing import Any
+
+from flask import Blueprint, current_app, render_template, request, redirect, url_for, flash
+from flask_login import login_required, current_user
+from werkzeug.utils import secure_filename
+
+from app.extensions import db
+
+from app.models import (
+    Lesson, LessonBlock, LessonAsset,
+    Curriculum, CurriculumOwner, AccessAccount,
+    CurriculumItem, LessonSubject,  # optional, since you import inside fns today
+)
+from flask import abort, jsonify
+from sqlalchemy import and_
+import bleach
+from bleach.css_sanitizer import CSSSanitizer
+
+
+DEFAULT_SHARES = 100
+
+
+bp = Blueprint("author", __name__, url_prefix="/author")
+
+
+def _assets_root() -> Path:
+    # Put assets under instance/lesson_assets/<lesson_id>/...
+    root = Path(current_app.instance_path) / "lesson_assets"
+    root.mkdir(parents=True, exist_ok=True)
+    return root
+
+
+def _require_author() -> None:
+    # Minimal gate for now. Replace with a real role later.
+    # Example: allow only specific email domain, or a boolean field on User.
+    allowed = True
+    if not allowed:
+        raise PermissionError("not_author")
+
+def _require_lesson_edit_perm(lesson: Lesson) -> None:
+    # v1 rule: only creator can edit
+    if not lesson.created_by_user_id or lesson.created_by_user_id != current_user.id:
+        raise PermissionError("not_lesson_owner")
+
+
+def _require_curriculum_perm(curriculum_id: str, *, need_edit: bool = False, need_manage: bool = False):
+    from app.models import CurriculumOwner
+
+    row = (CurriculumOwner.query
+           .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
+           .one_or_none())
+    if not row or row.shares <= 0:
+        raise PermissionError("not_owner")
+
+    top = (CurriculumOwner.query
+           .filter_by(curriculum_id=curriculum_id)
+           .order_by(CurriculumOwner.shares.desc(),
+                     CurriculumOwner.created_at.asc(),
+                     CurriculumOwner.id.asc())
+           .first())
+    is_owner = bool(top and top.user_id == current_user.id)
+
+    if need_manage and not is_owner:
+        raise PermissionError("not_admin")
+    if need_edit and not row.can_edit:
+        raise PermissionError("not_editor")
+
+    return row
+
+
+def _load_json_file(file_storage) -> dict[str, Any]:
+    raw = file_storage.read()
+    try:
+        obj = json.loads(raw)
+    except Exception as e:
+        raise ValueError(f"lesson.json is not valid JSON: {e}") from e
+    if not isinstance(obj, dict):
+        raise ValueError("lesson.json root must be an object")
+    return obj
+
+
+def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
+    """
+    Minimal schema:
+    {
+      "code": "spanish-basics-01",
+      "title": "Basics 1",
+      "description": "...",            (optional)
+      "language_code": "es",           (optional)
+      "is_published": false,           (optional)
+      "blocks": [
+        {"type": "markdown", "payload": {"text": "..."}},
+        {"type": "video_url", "payload": {"url": "https://..."}},
+        {"type": "quiz_mcq", "payload": {...}}
+      ],
+      "assets": [
+        {"ref": "assets/img1.png", "content_type": "image/png"}   (optional)
+      ]
+    }
+    """
+    code = payload.get("code")
+    title = payload.get("title")
+    blocks = payload.get("blocks")
+
+    if not isinstance(code, str) or not code.strip():
+        raise ValueError("Missing/invalid 'code' (string)")
+    if not isinstance(title, str) or not title.strip():
+        raise ValueError("Missing/invalid 'title' (string)")
+    if not isinstance(blocks, list) or len(blocks) == 0:
+        raise ValueError("Missing/invalid 'blocks' (non-empty list)")
+
+    allowed_types = {"markdown", "video_url", "quiz_mcq"}
+
+    for i, b in enumerate(blocks):
+        if not isinstance(b, dict):
+            raise ValueError(f"blocks[{i}] must be an object")
+        t = b.get("type")
+        p = b.get("payload")
+        if t not in allowed_types:
+            raise ValueError(f"blocks[{i}].type must be one of {sorted(allowed_types)}")
+        if not isinstance(p, dict):
+            raise ValueError(f"blocks[{i}].payload must be an object")
+
+        # Type-specific checks (minimal but catches common mistakes)
+        if t == "markdown":
+            if not isinstance(p.get("text"), str):
+                raise ValueError(f"blocks[{i}] markdown requires payload.text (string)")
+        elif t == "video_url":
+            url = p.get("url")
+            if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
+                raise ValueError(f"blocks[{i}] video_url requires payload.url (http/https string)")
+        elif t == "quiz_mcq":
+            prompt = p.get("prompt")
+            choices = p.get("choices")
+            answer_index = p.get("answer_index")
+            if not isinstance(prompt, str) or not prompt.strip():
+                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.prompt (string)")
+            if not isinstance(choices, list) or len(choices) < 2 or not all(isinstance(c, str) for c in choices):
+                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.choices (list of >=2 strings)")
+            if not isinstance(answer_index, int) or not (0 <= answer_index < len(choices)):
+                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.answer_index (int in range)")
+
+    assets = payload.get("assets", [])
+    if assets is not None:
+        if not isinstance(assets, list):
+            raise ValueError("'assets' must be a list if present")
+        for i, a in enumerate(assets):
+            if not isinstance(a, dict):
+                raise ValueError(f"assets[{i}] must be an object")
+            ref = a.get("ref")
+            if not isinstance(ref, str) or not ref.strip():
+                raise ValueError(f"assets[{i}].ref must be a string")
+            # Keep refs inside "assets/" namespace to avoid path weirdness
+            if not ref.startswith("assets/"):
+                raise ValueError(f"assets[{i}].ref must start with 'assets/'")
+
+    return payload
+
+
+def _extract_assets_zip(zip_fs, lesson_id: str) -> dict[str, tuple[str, int | None]]:
+    """
+    Extracts zip into instance/lesson_assets/<lesson_id>/...
+    Returns map: ref -> (storage_path, size_bytes)
+    We only accept files under assets/ in the zip.
+    """
+    root = _assets_root() / lesson_id
+    root.mkdir(parents=True, exist_ok=True)
+
+    with zipfile.ZipFile(zip_fs) as z:
+        out: dict[str, tuple[str, int | None]] = {}
+        for info in z.infolist():
+            if info.is_dir():
+                continue
+
+            # Normalize names
+            name = info.filename.replace("\\", "/")
+            if not name.startswith("assets/"):
+                continue  # ignore anything outside assets/
+
+            # Prevent zip-slip
+            target = (root / name).resolve()
+            if not str(target).startswith(str(root.resolve())):
+                continue
+
+            target.parent.mkdir(parents=True, exist_ok=True)
+            with z.open(info) as src, open(target, "wb") as dst:
+                dst.write(src.read())
+
+            out[name] = (str(target), getattr(info, "file_size", None))
+        return out
+
+
+@bp.get("/import")
+@login_required
+def import_form():
+    _require_author()
+    return render_template("author/import.html")
+
+
+@bp.post("/import")
+@login_required
+def import_post():
+    _require_author()
+
+    lesson_json_fs = request.files.get("lesson_json")
+    assets_zip_fs = request.files.get("assets_zip")
+
+    if not lesson_json_fs or lesson_json_fs.filename == "":
+        flash("Please upload lesson.json", "error")
+        return redirect(url_for("author.import_form"))
+
+    # Load + validate lesson.json
+    try:
+        payload = _load_json_file(lesson_json_fs)
+        payload = _validate_lesson_payload(payload)
+    except Exception as e:
+        flash(str(e), "error")
+        return redirect(url_for("author.import_form"))
+
+
+    code = payload["code"].strip()
+    title = payload["title"].strip()
+    desc = (payload.get("description") or None)
+    lang = (payload.get("language_code") or None)
+    is_published = bool(payload.get("is_published") or False)
+
+
+    # Upsert lesson by code
+    lesson = Lesson.query.filter_by(code=code).one_or_none()
+    if lesson:
+        lesson.title = title
+        lesson.description = desc
+        lesson.language_code = lang
+        lesson.created_by_user_id = current_user.id
+        lesson.is_published = is_published
+
+        # replace blocks always
+        LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+
+        # ONLY replace assets if a zip was provided
+        if assets_zip_fs and assets_zip_fs.filename:
+            LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+        db.session.flush()
+    else:
+
+        # Create Lesson
+        lesson = Lesson(
+            code=payload["code"].strip(),
+            title=payload["title"].strip(),
+            description=(payload.get("description") or None),
+            language_code=(payload.get("language_code") or None),
+            created_by_user_id=current_user.id,
+            is_published=bool(payload.get("is_published") or False),
+        )
+        db.session.add(lesson)
+        db.session.flush()  # get lesson.id
+
+    # Extract assets (optional)
+    extracted: dict[str, tuple[str, int | None]] = {}
+    if assets_zip_fs and assets_zip_fs.filename:
+        try:
+            extracted = _extract_assets_zip(assets_zip_fs, lesson.id)
+        except Exception as e:
+            db.session.rollback()
+            flash(f"assets.zip failed to extract: {e}", "error")
+            return redirect(url_for("author.import_form"))
+
+    # Insert LessonAsset rows based on manifest OR extracted content
+    # Preferred: use payload["assets"] as manifest if present.
+    manifest_assets = payload.get("assets") or []
+    if manifest_assets:
+        for a in manifest_assets:
+            ref = a["ref"]
+
+            if assets_zip_fs and assets_zip_fs.filename:
+                # zip import: must exist in extracted
+                if ref not in extracted:
+                    db.session.rollback()
+                    flash(f"Asset listed in lesson.json not found in zip: {ref}", "error")
+                    return redirect(url_for("author.import_form"))
+
+                storage_path, size_bytes = extracted[ref]
+                db.session.add(LessonAsset(
+                    lesson_id=lesson.id,
+                    ref=ref,
+                    storage_path=storage_path,
+                    content_type=a.get("content_type"),
+                    size_bytes=size_bytes,
+                ))
+            else:
+                # no zip: keep existing asset row if present (do NOT create blank paths)
+                existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+                if existing:
+                    existing.content_type = a.get("content_type") or existing.content_type
+                else:
+                    # optional: allow manifest to reference not-yet-uploaded assets, but don't serve them
+                    # (or you can make this a hard error if you prefer)
+                    pass
+    else:
+        # No manifest; if zip exists, register every extracted file
+        for ref, (storage_path, size_bytes) in extracted.items():
+            db.session.add(
+                LessonAsset(
+                    lesson_id=lesson.id,
+                    ref=ref,
+                    storage_path=storage_path,
+                    content_type=None,
+                    size_bytes=size_bytes,
+                )
+            )
+
+    # Insert blocks in order
+    for idx, b in enumerate(payload["blocks"]):
+        db.session.add(
+            LessonBlock(
+                lesson_id=lesson.id,
+                position=idx,
+                type=b["type"],
+                payload_json=b["payload"],
+            )
+        )
+
+    db.session.commit()
+    flash("Lesson imported.", "success")
+    # return redirect(url_for("main.lesson_page", lesson_id=lesson.id))
+    # return redirect(url_for("main.lesson_page", code=lesson.code))
+
+    return redirect(url_for("main.lesson_page", lesson_code=lesson.code))
+
+
+@bp.post("/lesson/<lesson_id>/apply_json")
+@login_required
+def lesson_apply_json(lesson_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    # Accept either: pasted JSON OR uploaded lesson.json file
+    raw_text = (request.form.get("lesson_json_text") or "").strip()
+    lesson_json_fs = request.files.get("lesson_json")
+
+    try:
+        if raw_text:
+            payload = json.loads(raw_text)
+        elif lesson_json_fs and lesson_json_fs.filename:
+            payload = _load_json_file(lesson_json_fs)
+        else:
+            flash("Provide lesson JSON (paste or upload lesson.json).", "error")
+            return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+        payload = _validate_lesson_payload(payload)
+    except Exception as e:
+        flash(f"Invalid lesson JSON: {e}", "error")
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+    # Optional: assets.zip (same as import)
+    assets_zip_fs = request.files.get("assets_zip")
+
+    # Replace lesson metadata from payload (but keep lesson.id + ownership)
+    # keep existing code; allow everything else
+    # lesson.code = lesson.code
+    lesson.title = payload["title"].strip()
+    lesson.description = (payload.get("description") or None)
+    lesson.language_code = (payload.get("language_code") or None)
+    lesson.is_published = bool(payload.get("is_published") or False)
+
+    # Replace contents
+    LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+    LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+    db.session.flush()
+
+    extracted: dict[str, tuple[str, int | None]] = {}
+    if assets_zip_fs and assets_zip_fs.filename:
+        try:
+            extracted = _extract_assets_zip(assets_zip_fs, lesson.id)
+        except Exception as e:
+            db.session.rollback()
+            flash(f"assets.zip failed to extract: {e}", "error")
+            return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+    # Assets: prefer manifest if present
+    manifest_assets = payload.get("assets") or []
+    if manifest_assets:
+        for a in manifest_assets:
+            ref = a["ref"]
+            if assets_zip_fs and assets_zip_fs.filename and ref not in extracted:
+                db.session.rollback()
+                flash(f"Asset listed in lesson.json not found in zip: {ref}", "error")
+                return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+            storage_path, size_bytes = extracted.get(ref, ("", None))
+            db.session.add(
+                LessonAsset(
+                    lesson_id=lesson.id,
+                    ref=ref,
+                    storage_path=storage_path,
+                    content_type=a.get("content_type"),
+                    size_bytes=size_bytes,
+                )
+            )
+    else:
+        for ref, (storage_path, size_bytes) in extracted.items():
+            db.session.add(
+                LessonAsset(
+                    lesson_id=lesson.id,
+                    ref=ref,
+                    storage_path=storage_path,
+                    content_type=None,
+                    size_bytes=size_bytes,
+                )
+            )
+
+    # Blocks
+    for idx, b in enumerate(payload["blocks"]):
+        db.session.add(
+            LessonBlock(
+                lesson_id=lesson.id,
+                position=idx,
+                type=b["type"],
+                payload_json=b["payload"],
+            )
+        )
+
+    db.session.commit()
+    flash("Applied lesson JSON to this lesson.", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+
+@bp.get("/lessons")
+@login_required
+def lesson_index():
+    _require_author()
+    lessons = (Lesson.query
+               .filter_by(created_by_user_id=current_user.id)
+               .order_by(Lesson.updated_at.desc())
+               .all())
+    return render_template("author/lesson_index.html", lessons=lessons)
+
+
+# @bp.get("/lesson/new")
+# @login_required
+# def lesson_new_form():
+#     _require_author()
+#     return render_template("author/lesson_new.html")
+
+@bp.get("/lesson/new")
+@login_required
+def lesson_new_form():
+    _require_author()
+
+    subjects = (LessonSubject.query
+                .filter(LessonSubject.active.is_(True))
+                .order_by(LessonSubject.name.asc())
+                .all())
+
+    return render_template("author/lesson_new.html", subjects=subjects)
+
+
+@bp.post("/lesson/new")
+@login_required
+def lesson_new_post():
+    _require_author()
+
+    subject_code = (request.form.get("subject_code") or "").strip() or None
+    code = (request.form.get("code") or "").strip()
+    title = (request.form.get("title") or "").strip()
+    desc = (request.form.get("description") or "").strip() or None
+    lang = (request.form.get("language_code") or "").strip() or None
+
+    if subject_code:
+        subj = (LessonSubject.query
+                .filter_by(code=subject_code, active=True)
+                .one_or_none())
+        if not subj:
+            flash("Invalid subject.", "error")
+            return redirect(url_for("author.lesson_new_form"))
+
+    if not code or not title:
+        flash("Missing code/title", "error")
+        return redirect(url_for("author.lesson_new_form"))
+
+    existing = Lesson.query.filter_by(code=code).one_or_none()
+    if existing:
+        flash("Lesson code already exists.", "error")
+        return redirect(url_for("author.lesson_new_form"))
+
+    lesson = Lesson(
+        code=code,
+        title=title,
+        description=desc,
+        language_code=lang,
+        subject_code=subject_code,
+        created_by_user_id=current_user.id,
+        visibility="private",
+        is_published=False,
+    )
+    db.session.add(lesson)
+    db.session.flush()
+
+    # starter block
+    db.session.add(LessonBlock(
+        lesson_id=lesson.id,
+        position=0,
+        type="markdown",
+        payload_json={"text": "New lesson. Edit me."},
+    ))
+    db.session.commit()
+
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+
+
+
+
+ALLOWED_TAGS = [
+    "p","br","hr","div","span",
+    "b","strong","i","em","u","s",
+    "h1","h2","h3","h4","h5","h6",
+    "ul","ol","li",
+    "blockquote","code","pre",
+    "a","img", "style",
+    "table","thead","tbody","tr","th","td",
+]
+
+ALLOWED_ATTRS = {
+    "*": ["class", "title", "style"],
+    "a": ["href", "title", "target", "rel"],
+    "img": ["src", "alt", "title", "width", "height", "style"],
+}
+
+ALLOWED_PROTOCOLS = ["http", "https", "mailto"]
+
+css_sanitizer = CSSSanitizer(
+    allowed_css_properties=[
+        # keep this tight; add as you discover needs
+        "color", "background-color",
+        "font-size", "font-weight", "font-style", "text-decoration",
+        "text-align", "line-height",
+        "margin", "margin-top", "margin-right", "margin-bottom", "margin-left",
+        "padding", "padding-top", "padding-right", "padding-bottom", "padding-left",
+        "border", "border-width", "border-style", "border-color", "border-radius",
+        "width", "height", "max-width",
+        "display",
+    ],
+    # optionally: allow_css_variables=False (default) keeps it stricter
+)
+
+def sanitize_html(user_html: str) -> str:
+    cleaned = bleach.clean(
+        user_html or "",
+        tags=ALLOWED_TAGS,
+        attributes=ALLOWED_ATTRS,
+        protocols=ALLOWED_PROTOCOLS,
+        strip=True,
+        css_sanitizer=css_sanitizer,
+    )
+    return bleach.linkify(cleaned)
+
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/update_form")
+@login_required
+def lesson_block_update_form(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    _require_lesson_edit_perm(lesson)
+
+    b = LessonBlock.query.filter_by(id=block_id, lesson_id=lesson.id).one_or_none()
+    if not b:
+        abort(404)
+
+    if b.type == "markdown":
+        b.payload_json = {"text": request.form.get("text") or ""}
+
+    elif b.type == "video_url":
+        b.payload_json = {
+            "url": request.form.get("url") or "",
+            "caption": request.form.get("caption") or "",
+        }
+
+    elif b.type == "quiz_mcq":
+        payload = dict(b.payload_json or {})  # NEW object
+
+        mode = (request.form.get("mode") or "graded").strip()
+        if mode not in ("graded", "ungraded"):
+            mode = "graded"
+        payload["mode"] = mode
+
+        # typed prompt
+        prompt_kind = (request.form.get("prompt_kind") or "text").strip()
+        prompt_value = (request.form.get("prompt_value") or "").strip()
+        if prompt_kind == "text":
+            payload["prompt"] = prompt_value
+        else:
+            payload["prompt"] = {"kind": prompt_kind, "value": prompt_value}
+
+        # typed choices (IMPORTANT: _value fields)
+        idxs = set()
+        for k in request.form.keys():
+            if k.startswith("choice_") and k.endswith("_value"):
+                try:
+                    idxs.add(int(k.split("_")[1]))
+                except Exception:
+                    pass
+        idxs = sorted(idxs)
+
+        choices = []
+        for i in idxs:
+            kind = (request.form.get(f"choice_{i}_kind") or "text").strip()
+            value = (request.form.get(f"choice_{i}_value") or "").strip()
+            if kind == "text":
+                choices.append(value)
+            else:
+                choices.append({"kind": kind, "value": value})
+
+        if len(choices) < 2:
+            choices = choices + [""] * (2 - len(choices))
+        payload["choices"] = choices
+
+        # multiple correct
+        raw_correct = request.form.getlist("correct_indices")
+        if raw_correct:
+            correct = []
+            for x in raw_correct:
+                try:
+                    j = int(x)
+                    if 0 <= j < len(choices):
+                        correct.append(j)
+                except ValueError:
+                    pass
+            correct = sorted(set(correct))
+            payload["correct_indices"] = correct
+            payload["answer_index"] = correct[0] if correct else 0
+        else:
+            try:
+                ans = int(request.form.get("answer_index") or "0")
+            except ValueError:
+                ans = 0
+            ans = max(0, min(ans, len(choices) - 1))
+            payload["answer_index"] = ans
+            payload.pop("correct_indices", None)
+
+        b.payload_json = payload  # MUST reassign
+        print("SAVED PAYLOAD:", b.payload_json)
+
+    elif b.type == "video_asset":
+        b.payload_json = {
+            "ref": (request.form.get("ref") or "").strip(),
+            "caption": (request.form.get("caption") or "").strip(),
+            "controls": bool(request.form.get("controls")),
+            "autoplay": bool(request.form.get("autoplay")),
+        }
+
+    elif b.type == "desmos":
+        h = request.form.get("height") or "480"
+        try:
+            h = max(200, min(1200, int(h)))
+        except Exception:
+            h = 480
+        b.payload_json = {
+            "graph_url": (request.form.get("graph_url") or "").strip(),
+            "height": h,
+        }
+    elif b.type == "html_safe":
+        raw = request.form.get("html", "")
+        b.payload_json = {"html": sanitize_html(raw)}
+
+    elif b.type == "callout":
+        variant = (request.form.get("variant") or "note").strip()
+        title = (request.form.get("title") or "").strip()
+        text = (request.form.get("text") or "").strip()
+
+        b.payload_json = {
+            "variant": variant,
+            "title": title,
+            "text": text,
+        }
+
+    elif b.type == "reveal":
+        summary = (request.form.get("summary") or "Show").strip()
+        text = (request.form.get("text") or "").strip()
+        open_default = (request.form.get("open") == "on")
+
+        b.payload_json = {
+            "summary": summary,
+            "text": text,
+            "open": open_default,
+        }
+
+
+    else:
+        # unknown type: do nothing
+        pass
+
+    db.session.commit()
+    flash("Block saved.", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/mcq/add_choice")
+@login_required
+def mcq_add_choice(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    _require_lesson_edit_perm(lesson)
+
+    b = LessonBlock.query.filter_by(id=block_id, lesson_id=lesson.id).one_or_none()
+    if not b or b.type != "quiz_mcq":
+        abort(404)
+
+    payload = dict(b.payload_json or {})
+
+    # MERGE current editor inputs (typed fields)
+    payload["mode"] = (request.form.get("mode") or payload.get("mode") or "graded")
+
+    prompt_kind = (request.form.get("prompt_kind") or "text").strip()
+    prompt_value = (request.form.get("prompt_value") or "").strip()
+    if prompt_kind == "text":
+        payload["prompt"] = prompt_value
+    else:
+        payload["prompt"] = {"kind": prompt_kind, "value": prompt_value}
+
+    # collect typed choices from submitted form
+    idxs = set()
+    for k in request.form.keys():
+        if k.startswith("choice_") and k.endswith("_value"):
+            try:
+                idxs.add(int(k.split("_")[1]))
+            except Exception:
+                pass
+    idxs = sorted(idxs)
+
+    posted_choices = []
+    for i in idxs:
+        kind = (request.form.get(f"choice_{i}_kind") or "text").strip()
+        value = (request.form.get(f"choice_{i}_value") or "").strip()
+        if kind == "text":
+            posted_choices.append(value)
+        else:
+            posted_choices.append({"kind": kind, "value": value})
+
+    if posted_choices:
+        payload["choices"] = posted_choices
+
+    # Now add one blank choice
+    choices = list(payload.get("choices") or ["", ""])
+    if len(choices) < 2:
+        choices += [""] * (2 - len(choices))
+    choices.append("")
+    payload["choices"] = choices
+
+    # Keep indices sane
+    try:
+        ans = int(request.form.get("answer_index") or payload.get("answer_index") or 0)
+    except ValueError:
+        ans = 0
+    payload["answer_index"] = max(0, min(ans, len(choices) - 1))
+
+    b.payload_json = payload
+    db.session.commit()
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+
+
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/mcq/remove_choice_at")
+@login_required
+def mcq_remove_choice_at(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    _require_lesson_edit_perm(lesson)
+
+    b = LessonBlock.query.filter_by(id=block_id, lesson_id=lesson.id).one_or_none()
+    if not b or b.type != "quiz_mcq":
+        abort(404)
+
+    payload = dict(b.payload_json or {})
+
+    # MERGE current editor inputs first
+    payload["mode"] = (request.form.get("mode") or payload.get("mode") or "graded")
+    payload["prompt"] = request.form.get("prompt") or payload.get("prompt") or ""
+
+    # MERGE current editor inputs (typed fields)
+    payload["mode"] = (request.form.get("mode") or payload.get("mode") or "graded")
+
+    prompt_kind = (request.form.get("prompt_kind") or "text").strip()
+    prompt_value = (request.form.get("prompt_value") or "").strip()
+    if prompt_kind == "text":
+        payload["prompt"] = prompt_value
+    else:
+        payload["prompt"] = {"kind": prompt_kind, "value": prompt_value}
+
+    # collect typed choices from submitted form: choice_{i}_kind and choice_{i}_value
+    idxs = set()
+    for k in request.form.keys():
+        if k.startswith("choice_") and k.endswith("_value"):
+            try:
+                idxs.add(int(k.split("_")[1]))
+            except Exception:
+                pass
+    idxs = sorted(idxs)
+
+    posted_choices = []
+    for i in idxs:
+        kind = (request.form.get(f"choice_{i}_kind") or "text").strip()
+        value = (request.form.get(f"choice_{i}_value") or "").strip()
+        if kind == "text":
+            posted_choices.append(value)
+        else:
+            posted_choices.append({"kind": kind, "value": value})
+
+    if posted_choices:
+        payload["choices"] = posted_choices
+
+    choices = list(payload.get("choices") or ["", ""])
+    if len(choices) <= 2:
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+    # idx comes from button name="idx" value="..."
+    try:
+        idx = int(request.form.get("idx") or "-1")
+    except ValueError:
+        idx = -1
+    if idx < 0 or idx >= len(choices):
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+    choices.pop(idx)
+
+    # adjust answer_index
+    try:
+        ans = int(request.form.get("answer_index") or payload.get("answer_index") or 0)
+    except ValueError:
+        ans = 0
+    if ans == idx:
+        ans = 0
+    elif ans > idx:
+        ans -= 1
+    ans = max(0, min(ans, len(choices) - 1))
+
+    payload["choices"] = choices
+    payload["answer_index"] = ans
+
+    # adjust correct_indices if present
+    corr = payload.get("correct_indices")
+    if isinstance(corr, list):
+        new_corr = []
+        for c in corr:
+            try:
+                c = int(c)
+            except ValueError:
+                continue
+            if c == idx:
+                continue
+            if c > idx:
+                c -= 1
+            if 0 <= c < len(choices):
+                new_corr.append(c)
+        payload["correct_indices"] = sorted(set(new_corr))
+
+    b.payload_json = payload
+    db.session.commit()
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+
+
+
+
+
+@bp.get("/lesson/<lesson_id>/edit")
+@login_required
+def lesson_edit(lesson_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    blocks = (LessonBlock.query
+              .filter_by(lesson_id=lesson.id)
+              .order_by(LessonBlock.position.asc())
+              .all())
+    assets = (LessonAsset.query
+              .filter_by(lesson_id=lesson.id)
+              .order_by(LessonAsset.created_at.desc())
+              .all())
+
+    selected_block_id = request.args.get("block_id") or (blocks[0].id if blocks else None)
+    selected_block = next((b for b in blocks if b.id == selected_block_id), None)
+
+    return render_template(
+        "author/lesson_edit.html",
+        lesson=lesson,
+        blocks=blocks,
+        assets=assets,
+        selected_block=selected_block,
+    )
+
+
+@bp.post("/lesson/<lesson_id>/edit_meta")
+@login_required
+def lesson_edit_meta(lesson_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    lesson.title = (request.form.get("title") or "").strip() or lesson.title
+    lesson.description = (request.form.get("description") or "").strip() or None
+    lesson.language_code = (request.form.get("language_code") or "").strip() or None
+    lesson.visibility = (request.form.get("visibility") or "private").strip()
+    lesson.is_published = bool(request.form.get("is_published"))
+
+    db.session.commit()
+    flash("Lesson saved.", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+@bp.post("/lesson/<lesson_id>/blocks/add")
+@login_required
+def lesson_block_add(lesson_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    block_type = (request.form.get("type") or "markdown").strip()
+
+    # minimal defaults
+    if block_type == "markdown":
+        payload = {"text": ""}
+    elif block_type == "video_url":
+        payload = {"url": "", "caption": ""}
+    elif block_type == "video_asset":
+        payload = {"ref": "", "caption": "", "controls": True, "autoplay": False}
+    elif block_type == "desmos":
+        payload = {"graph_url": "", "height": 480}
+    elif block_type == "quiz_mcq":
+        payload = {"prompt": "", "choices": ["", ""], "answer_index": 0}
+    elif block_type == "callout":
+        payload = {
+            "variant": "note",  # note | info | tip | warn | danger
+            "title": "",
+            "text": "",
+        }
+    elif block_type == "reveal":
+        payload = {
+            "summary": "Show answer",
+            "text": "",
+            "open": False,  # default collapsed
+        }
+    else:
+        payload = {}
+
+    last_pos = (db.session.query(db.func.max(LessonBlock.position))
+                .filter(LessonBlock.lesson_id == lesson.id)
+                .scalar())
+    next_pos = int(last_pos + 1) if last_pos is not None else 0
+
+    b = LessonBlock(lesson_id=lesson.id, position=next_pos, type=block_type, payload_json=payload)
+    db.session.add(b)
+    db.session.commit()
+
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/delete")
+@login_required
+def lesson_block_delete(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    b = LessonBlock.query.filter_by(id=block_id, lesson_id=lesson.id).one_or_none()
+    if not b:
+        abort(404)
+
+    db.session.delete(b)
+    db.session.flush()
+
+    # re-pack positions 0..n-1 (two-phase to avoid uq collisions)
+    blocks = (LessonBlock.query
+              .filter_by(lesson_id=lesson.id)
+              .order_by(LessonBlock.position.asc(), LessonBlock.id.asc())
+              .all())
+
+    # Phase 1: move everything out of the way
+    OFFSET = 1000
+    for i, bb in enumerate(blocks):
+        bb.position = OFFSET + i
+    db.session.flush()
+
+    # Phase 2: assign final contiguous positions
+    for i, bb in enumerate(blocks):
+        bb.position = i
+
+    db.session.commit()
+    flash("Block deleted.", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/move")
+@login_required
+def lesson_block_move(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    _require_lesson_edit_perm(lesson)
+
+    direction = (request.form.get("direction") or "").strip()
+
+    blocks = (LessonBlock.query
+              .filter_by(lesson_id=lesson.id)
+              .order_by(LessonBlock.position.asc())
+              .all())
+
+    idx = next((i for i, bb in enumerate(blocks) if bb.id == block_id), None)
+    if idx is None:
+        abort(404)
+
+    if direction == "up":
+        if idx == 0:
+            return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=block_id))
+        a = blocks[idx]       # moving block
+        b = blocks[idx - 1]   # block above
+    elif direction == "down":
+        if idx >= len(blocks) - 1:
+            return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=block_id))
+        a = blocks[idx]
+        b = blocks[idx + 1]
+    else:
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=block_id))
+
+    # Swap using a temporary position to satisfy unique constraint (lesson_id, position)
+    pos_a = int(a.position)
+    pos_b = int(b.position)
+
+    tmp = -1
+    # (optional) ensure tmp isn't used; you can also use min(pos)-1
+    a.position = tmp
+    db.session.flush()   # apply tmp immediately
+
+    b.position = pos_a
+    db.session.flush()
+
+    a.position = pos_b
+    db.session.commit()
+
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=block_id))
+
+
+
+@bp.post("/lesson/<lesson_id>/blocks/<block_id>/update")
+@login_required
+def lesson_block_update(lesson_id: str, block_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    b = LessonBlock.query.filter_by(id=block_id, lesson_id=lesson.id).one_or_none()
+    if not b:
+        abort(404)
+
+    # allow changing type (optional)
+    new_type = (request.form.get("type") or b.type).strip()
+    b.type = new_type
+
+    # editor sends raw JSON payload
+    raw = (request.form.get("payload_json") or "").strip()
+    try:
+        payload = json.loads(raw) if raw else {}
+        if not isinstance(payload, dict):
+            raise ValueError("payload_json must be a JSON object")
+    except Exception as e:
+        flash(f"Invalid JSON: {e}", "error")
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+    b.payload_json = payload
+    db.session.commit()
+
+    flash("Block saved.", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
+
+
+@bp.post("/lesson/<lesson_id>/assets/upload")
+@login_required
+def lesson_asset_upload(lesson_id: str):
+    _require_author()
+    lesson = Lesson.query.get_or_404(lesson_id)
+    try:
+        _require_lesson_edit_perm(lesson)
+    except PermissionError:
+        abort(403)
+
+    fs = request.files.get("file")
+    if not fs or not fs.filename:
+        flash("No file selected.", "error")
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+    # store under instance/lesson_assets/<lesson_id>/assets/<filename>
+    root = _assets_root() / lesson.id / "assets"
+    root.mkdir(parents=True, exist_ok=True)
+
+    filename = secure_filename(fs.filename)
+    if not filename:
+        flash("Bad filename.", "error")
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+    target = (root / filename).resolve()
+    if not str(target).startswith(str(((_assets_root() / lesson.id).resolve()))):
+        flash("Refused path.", "error")
+        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+    fs.save(target)
+
+    ref = f"assets/{filename}"
+    size_bytes = target.stat().st_size
+
+    existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+    if existing:
+        existing.storage_path = str(target)
+        existing.content_type = fs.mimetype
+        existing.size_bytes = size_bytes
+    else:
+        db.session.add(LessonAsset(
+            lesson_id=lesson.id,
+            ref=ref,
+            storage_path=str(target),
+            content_type=fs.mimetype,
+            size_bytes=size_bytes,
+        ))
+
+    db.session.commit()
+    flash(f"Uploaded {ref}", "success")
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+
+# @bp.get("/curriculum/new")
+# @login_required
+# def curriculum_new_form():
+#     _require_author()
+#     return render_template("author/curriculum_new.html")
+
+@bp.get("/curriculum/new")
+@login_required
+def curriculum_new_form():
+    _require_author()
+
+    subjects = (LessonSubject.query
+        .filter(LessonSubject.active.is_(True))
+        .order_by(LessonSubject.name.asc())
+        .all())
+
+    return render_template(
+        "author/curriculum_new.html",
+        subjects=subjects,
+    )
+
+
+
+@bp.post("/curriculum/new")
+@login_required
+def curriculum_new_post():
+    _require_author()
+    from app.models import Curriculum
+
+    code = (request.form.get("code") or "").strip()
+    title = (request.form.get("title") or "").strip()
+    desc = (request.form.get("description") or "").strip() or None
+    subject_code = (request.form.get("subject_code") or "").strip() or None
+
+    if subject_code:
+        subj = (LessonSubject.query
+                .filter_by(code=subject_code, active=True)
+                .one_or_none())
+        if not subj:
+            flash("Invalid subject.", "error")
+            return redirect(url_for("author.curriculum_new_form"))
+
+    if not code or not title:
+        flash("Missing code/title", "error")
+        return redirect(url_for("author.curriculum_new_form"))
+
+    cur = Curriculum(code=code,
+                     title=title,
+                     description=desc,
+                     subject_code=subject_code,
+                     created_by_user_id=current_user.id)
+    db.session.add(cur)
+    db.session.flush()  # get cur.id
+
+    # Create curriculum wallet account
+    wallet = AccessAccount(
+        owner_user_id=None,
+        account_type="curriculum_wallet",
+        currency_code="access_note",
+    )
+    db.session.add(wallet)
+    db.session.flush()
+
+    cur.wallet_account_id = wallet.id
+
+    # Creator owns 100% initially
+    db.session.add(CurriculumOwner(
+        curriculum_id=cur.id,
+        user_id=current_user.id,
+        shares=DEFAULT_SHARES,
+        can_view_analytics=True,
+        can_edit=True,
+        can_manage_ownership=True,
+    ))
+
+    share_asset = get_curriculum_share_asset(cur.id)
+    user_wallet = get_or_create_user_wallet(current_user.id)
+    treasury = get_or_create_system_account("treasury")  # or "share_issuer"
+
+    post_access_txn(
+        event_type="curriculum_initial_mint",
+        idempotency_key=f"curriculum_mint:{cur.id}",
+        actor_user_id=current_user.id,
+        context_type="curriculum",
+        context_id=cur.id,
+        entries=[
+            EntrySpec(account_id=treasury.id, asset_id=share_asset.id, delta=-DEFAULT_SHARES, entry_type="mint"),
+            EntrySpec(account_id=user_wallet.id, asset_id=share_asset.id, delta=+DEFAULT_SHARES, entry_type="mint"),
+        ],
+        forbid_user_overdraft=False,  # treasury can go negative if you treat it as issuer
+    )
+
+    db.session.commit()
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+
+
+@bp.get("/curriculum/<curriculum_id>/edit")
+@login_required
+def curriculum_edit(curriculum_id: str):
+    _require_author()
+    from app.models import Curriculum, CurriculumItem, Lesson
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    try:
+        _require_curriculum_perm(cur.id, need_edit=True)
+    except PermissionError:
+        from flask import abort
+        abort(403)
+
+    items = (CurriculumItem.query
+             .filter_by(curriculum_id=cur.id)
+             .order_by(CurriculumItem.position.asc())
+             .all())
+    lessons = Lesson.query.order_by(Lesson.title.asc()).all()
+
+    return render_template("author/curriculum_edit.html", curriculum=cur, items=items, lessons=lessons)
+
+
+@bp.post("/curriculum/<curriculum_id>/edit")
+@login_required
+def curriculum_edit_post(curriculum_id: str):
+    _require_author()
+    from app.models import Curriculum, CurriculumItem
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+
+    # Items come in as parallel arrays
+    item_type = request.form.getlist("item_type")
+    phase_title = request.form.getlist("phase_title")
+    lesson_id = request.form.getlist("lesson_id")
+    note = request.form.getlist("note")
+    repeat = request.form.getlist("repeat")
+
+    # wipe + rebuild (fast + consistent)
+    CurriculumItem.query.filter_by(curriculum_id=cur.id).delete()
+    db.session.flush()
+
+    pos = 0
+    for i, t in enumerate(item_type):
+        t = (t or "").strip().lower()
+
+        if t == "phase":
+            title = (phase_title[i] if i < len(phase_title) else "").strip()
+            if not title:
+                title = "Phase"
+            db.session.add(CurriculumItem(
+                curriculum_id=cur.id,
+                position=pos,
+                item_type="phase",
+                phase_title=title,
+            ))
+            pos += 1
+
+        elif t == "lesson":
+            lid = (lesson_id[i] if i < len(lesson_id) else "").strip() or None
+            if not lid:
+                continue
+            n = 1
+            try:
+                n = max(1, min(50, int((repeat[i] if i < len(repeat) else "1") or "1")))
+            except Exception:
+                n = 1
+            n_note = (note[i] if i < len(note) else "").strip() or None
+
+            for _ in range(n):
+                db.session.add(CurriculumItem(
+                    curriculum_id=cur.id,
+                    position=pos,
+                    item_type="lesson",
+                    lesson_id=lid,
+                    note=n_note,
+                ))
+                pos += 1
+
+    db.session.commit()
+    flash("Curriculum saved.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+
+from uuid import uuid4
+from datetime import datetime as _dt
+
+@bp.post("/curriculum/<curriculum_id>/orders")
+@login_required
+def place_order(curriculum_id: str):
+    """
+    JSON body:
+      {
+        "side": "bid" | "ask",
+        "qty_shares": 5,
+        "price_an": 1.23    # optional alternative to price_ticks_per_share
+        "price_ticks_per_share": 1230
+      }
+    """
+    from app.access_ledger.service import (
+        get_an_asset, get_curriculum_share_asset,
+        get_or_create_user_wallet, get_or_create_system_account,
+        post_access_txn, EntrySpec, AN_SCALE,
+    )
+    from app.models import MarketOrder, Curriculum
+
+    Curriculum.query.filter_by(id=curriculum_id).one_or_none() or (lambda: (_ for _ in ()).throw(ValueError("bad curriculum_id")))()
+
+    payload = request.get_json(force=True) or {}
+    side = (payload.get("side") or "").strip().lower()
+    qty = int(payload.get("qty_shares") or 0)
+
+    if side not in ("bid", "ask"):
+        return {"error": "side must be bid or ask"}, 400
+    if qty <= 0:
+        return {"error": "qty_shares must be > 0"}, 400
+
+    if payload.get("price_ticks_per_share") is not None:
+        price_ticks = int(payload["price_ticks_per_share"])
+    else:
+        # price_an is in AN, convert to ticks
+        price_an = payload.get("price_an")
+        if price_an is None:
+            return {"error": "provide price_ticks_per_share or price_an"}, 400
+        price_ticks = int(round(float(price_an) * AN_SCALE))
+
+    if price_ticks <= 0:
+        return {"error": "price must be > 0"}, 400
+
+    an = get_an_asset()
+    share_asset = get_curriculum_share_asset(curriculum_id)
+
+    user_wallet = get_or_create_user_wallet(current_user.id)
+    escrow = get_or_create_system_account("escrow_pool")  # shared escrow account for all markets
+
+    # Lock funds into escrow
+    if side == "bid":
+        locked_an = price_ticks * qty
+        txn_id = post_access_txn(
+            event_type="market_place_bid",
+            idempotency_key=f"market_place_bid:{uuid4().hex}",
+            actor_user_id=current_user.id,
+            context_type="curriculum",
+            context_id=curriculum_id,
+            entries=[
+                EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=-locked_an),
+                EntrySpec(account_id=escrow.id, asset_id=an.id, delta=+locked_an),
+            ],
+        )
+        order = MarketOrder(
+            curriculum_id=curriculum_id,
+            user_id=current_user.id,
+            side="bid",
+            status="open",
+            price_ticks_per_share=price_ticks,
+            qty_shares=qty,
+            remaining_shares=qty,
+            locked_an_ticks=locked_an,
+            locked_shares=0,
+        )
+    else:
+        locked_sh = qty
+        txn_id = post_access_txn(
+            event_type="market_place_ask",
+            idempotency_key=f"market_place_ask:{uuid4().hex}",
+            actor_user_id=current_user.id,
+            context_type="curriculum",
+            context_id=curriculum_id,
+            entries=[
+                EntrySpec(account_id=user_wallet.id, asset_id=share_asset.id, delta=-locked_sh),
+                EntrySpec(account_id=escrow.id, asset_id=share_asset.id, delta=+locked_sh),
+            ],
+        )
+        order = MarketOrder(
+            curriculum_id=curriculum_id,
+            user_id=current_user.id,
+            side="ask",
+            status="open",
+            price_ticks_per_share=price_ticks,
+            qty_shares=qty,
+            remaining_shares=qty,
+            locked_an_ticks=0,
+            locked_shares=locked_sh,
+        )
+
+    db.session.add(order)
+    db.session.commit()
+
+    # Matching engine (simple + deterministic)
+    _match_curriculum_orders(curriculum_id, new_order_id=order.id)
+
+    return {"ok": True, "order_id": order.id, "lock_txn_id": txn_id}
+
+
+@bp.post("/orders/<int:order_id>/cancel")
+@login_required
+def cancel_order(order_id: int):
+    from app.access_ledger.service import (
+        get_an_asset, get_curriculum_share_asset,
+        get_or_create_user_wallet, get_or_create_system_account,
+        post_access_txn, EntrySpec,
+    )
+    from app.models import MarketOrder
+
+    o = MarketOrder.query.filter_by(id=order_id).one_or_none()
+    if not o:
+        return {"error": "order not found"}, 404
+    if o.user_id != current_user.id:
+        return {"error": "not your order"}, 403
+    if o.status != "open" and o.status != "partial":
+        return {"error": f"cannot cancel status={o.status}"}, 400
+
+    an = get_an_asset()
+    share_asset = get_curriculum_share_asset(o.curriculum_id)
+    user_wallet = get_or_create_user_wallet(current_user.id)
+    escrow = get_or_create_system_account("escrow_pool")
+
+    entries = []
+    if o.side == "bid":
+        # refund remaining locked AN (whatever is still locked)
+        if o.locked_an_ticks > 0:
+            entries = [
+                EntrySpec(account_id=escrow.id, asset_id=an.id, delta=-int(o.locked_an_ticks)),
+                EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+int(o.locked_an_ticks)),
+            ]
+    else:
+        if o.locked_shares > 0:
+            entries = [
+                EntrySpec(account_id=escrow.id, asset_id=share_asset.id, delta=-int(o.locked_shares)),
+                EntrySpec(account_id=user_wallet.id, asset_id=share_asset.id, delta=+int(o.locked_shares)),
+            ]
+
+    if entries:
+        post_access_txn(
+            event_type="market_cancel_order",
+            idempotency_key=f"market_cancel:{order_id}:{uuid4().hex}",
+            actor_user_id=current_user.id,
+            context_type="curriculum",
+            context_id=o.curriculum_id,
+            entries=entries,
+        )
+
+    o.status = "canceled"
+    o.canceled_at = _dt.utcnow()
+    o.remaining_shares = 0
+    o.locked_an_ticks = 0
+    o.locked_shares = 0
+    db.session.commit()
+
+    return {"ok": True}
+
+
+def _match_curriculum_orders(curriculum_id: str, *, new_order_id: int | None = None) -> None:
+    """
+    Very simple matcher:
+      - Crosses bids/asks if prices overlap
+      - Price rule: maker price (the existing resting order)
+      - Uses escrow account to deliver shares/AN
+      - Updates MarketOrder remaining + locked fields
+      - Records MarketTrade
+    """
+    from app.access_ledger.service import (
+        get_an_asset, get_curriculum_share_asset,
+        get_or_create_user_wallet, get_or_create_system_account,
+        post_access_txn, EntrySpec,
+    )
+    from app.models import MarketOrder, MarketTrade
+    from sqlalchemy import and_
+
+    an = get_an_asset()
+    share_asset = get_curriculum_share_asset(curriculum_id)
+    escrow = get_or_create_system_account("escrow_pool")
+
+    while True:
+        # best bid, best ask
+        best_bid = (MarketOrder.query
+            .filter_by(curriculum_id=curriculum_id)
+            .filter(MarketOrder.side == "bid")
+            .filter(MarketOrder.status.in_(("open","partial")))
+            .filter(MarketOrder.remaining_shares > 0)
+            .order_by(MarketOrder.price_ticks_per_share.desc(), MarketOrder.created_at.asc(), MarketOrder.id.asc())
+            .with_for_update()
+            .first())
+
+        best_ask = (MarketOrder.query
+            .filter_by(curriculum_id=curriculum_id)
+            .filter(MarketOrder.side == "ask")
+            .filter(MarketOrder.status.in_(("open","partial")))
+            .filter(MarketOrder.remaining_shares > 0)
+            .order_by(MarketOrder.price_ticks_per_share.asc(), MarketOrder.created_at.asc(), MarketOrder.id.asc())
+            .with_for_update()
+            .first())
+
+        if not best_bid or not best_ask:
+            db.session.commit()
+            return
+
+        # no cross
+        if best_ask.price_ticks_per_share > best_bid.price_ticks_per_share:
+            db.session.commit()
+            return
+
+        # maker price = resting order price (one that is NOT the new order, if provided)
+        if new_order_id is not None and best_bid.id == new_order_id and best_ask.id != new_order_id:
+            trade_price = int(best_ask.price_ticks_per_share)
+        elif new_order_id is not None and best_ask.id == new_order_id and best_bid.id != new_order_id:
+            trade_price = int(best_bid.price_ticks_per_share)
+        else:
+            # default: seller price (ask) when ambiguous
+            trade_price = int(best_ask.price_ticks_per_share)
+
+        qty = int(min(best_bid.remaining_shares, best_ask.remaining_shares))
+        if qty <= 0:
+            db.session.commit()
+            return
+
+        buyer_wallet = get_or_create_user_wallet(best_bid.user_id)
+        seller_wallet = get_or_create_user_wallet(best_ask.user_id)
+
+        # Buyer previously locked at bid.price; if trade executes cheaper, refund the difference
+        bid_price = int(best_bid.price_ticks_per_share)
+        refund = max(0, bid_price - trade_price) * qty
+
+        # Total AN leaving escrow for this fill from the bid lock = bid_price * qty
+        escrow_out = bid_price * qty
+        seller_get = trade_price * qty
+
+        entries = [
+            # AN leg
+            EntrySpec(account_id=escrow.id, asset_id=an.id, delta=-escrow_out),
+            EntrySpec(account_id=seller_wallet.id, asset_id=an.id, delta=+seller_get),
+        ]
+        if refund > 0:
+            entries.append(EntrySpec(account_id=buyer_wallet.id, asset_id=an.id, delta=+refund))
+
+        # Share leg
+        entries += [
+            EntrySpec(account_id=escrow.id, asset_id=share_asset.id, delta=-qty),
+            EntrySpec(account_id=buyer_wallet.id, asset_id=share_asset.id, delta=+qty),
+        ]
+
+        ledger_txn_id = post_access_txn(
+            event_type="market_fill",
+            idempotency_key=f"market_fill:{best_bid.id}:{best_ask.id}:{uuid4().hex}",
+            context_type="curriculum",
+            context_id=curriculum_id,
+            entries=entries,
+        )
+
+        # Update orders
+        best_bid.remaining_shares -= qty
+        best_ask.remaining_shares -= qty
+
+        best_bid.locked_an_ticks -= escrow_out
+        best_ask.locked_shares -= qty
+
+        best_bid.status = "filled" if best_bid.remaining_shares == 0 else "partial"
+        best_ask.status = "filled" if best_ask.remaining_shares == 0 else "partial"
+        if best_bid.remaining_shares == 0:
+            best_bid.filled_at = _dt.utcnow()
+        if best_ask.remaining_shares == 0:
+            best_ask.filled_at = _dt.utcnow()
+
+        db.session.add(MarketTrade(
+            curriculum_id=curriculum_id,
+            buy_order_id=best_bid.id,
+            sell_order_id=best_ask.id,
+            buyer_id=best_bid.user_id,
+            seller_id=best_ask.user_id,
+            price_ticks_per_share=trade_price,
+            qty_shares=qty,
+            ledger_txn_id=ledger_txn_id,
+        ))
+
+        db.session.commit()

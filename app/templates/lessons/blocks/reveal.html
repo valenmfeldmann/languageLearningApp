@@ -1,0 +1,17 @@
+{% set _b = (block if block is defined else b) %}
+{% set p = _b.payload_json or {} %}
+{% set summary = p.get("summary","Show") %}
+{% set text = p.get("text","") %}
+{% set open_default = p.get("open", False) %}
+
+<details class="ll-reveal" {% if open_default %}open{% endif %}>
+  <summary class="ll-reveal-summary">{{ summary }}</summary>
+  <div class="ll-reveal-body" style="white-space:pre-wrap; margin-top:8px;">
+    {{ text }}
+  </div>
+</details>
+
+<style>
+  .ll-reveal{border:1px solid #ddd; border-radius:10px; padding:8px 10px; margin:10px 0;}
+  .ll-reveal-summary{cursor:pointer; font-weight:600;}
+</style>

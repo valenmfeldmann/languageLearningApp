@@ -1,0 +1,14 @@
+{% set _block = (block if block is defined else b) %}
+{% set p = _block.payload_json or {} %}
+
+{% if p.get("graph_url") %}
+  <div style="filter: invert(1) hue-rotate(180deg);">
+    <iframe
+      src="{{ p.get('graph_url') }}"
+      style="width:100%; height:{{ p.get('height',480) }}px; border:0;"
+      loading="lazy"
+    ></iframe>
+  </div>
+{% else %}
+  <em>(no Desmos graph set)</em>
+{% endif %}

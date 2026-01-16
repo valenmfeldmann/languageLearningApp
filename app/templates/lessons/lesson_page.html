@@ -1,0 +1,107 @@
+{% extends "base.html" %}
+
+{% block head %}
+<style>
+
+  /* Outer lesson outline */
+  .lesson-shell {
+    background: rgba(16, 20, 32, 0.78);
+    border: 1px solid var(--border);
+    border-radius: 18px;
+    box-shadow: var(--shadow);
+    padding: 22px;
+  }
+
+  /* Subtle focus on hover */
+  .lesson-block:hover {
+    background: rgba(255,255,255,0.045);
+  }
+
+  /* Header inside lesson */
+  .lesson-header {
+    margin-bottom: 22px;
+  }
+
+  .lesson-header h1 {
+    margin-bottom: 4px;
+  }
+
+  .lesson-header .attempt {
+    color: var(--muted);
+    font-size: 13px;
+  }
+</style>
+{% endblock %}
+
+{% block content %}
+<div class="lesson-container lesson-shell panel">
+  
+  <header style="margin-bottom: 30px;">
+    <h1 style="margin-bottom: 5px;">{{ lesson.title }}</h1>
+    <p class="muted">Lesson Attempt #{{ attempt.id }}</p>
+  </header>
+
+  {% for item in block_views %}
+    {% set b = item.b %}
+    <div class="lesson-block" id="block-{{ b.id }}" data-block-id="{{ b.id }}">
+      {% include item.tpl %}
+    </div>
+  {% endfor %}
+
+  <div class="lesson-footer">
+    {% if can_complete %}
+      <form method="POST" action="{{ url_for('main.complete_lesson', lesson_code=lesson.code) }}">
+        <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
+        <button type="submit" class="btn-complete">✓ Complete Lesson</button>
+      </form>
+    {% else %}
+      <div class="status-note">
+        Complete all quizzes above to finish this lesson.
+      </div>
+    {% endif %}
+  </div>
+
+</div>
+{% endblock %}
+
+{% block scripts %}
+<script>
+  window.addEventListener("DOMContentLoaded", () => {
+    if (!location.hash) return;
+    setTimeout(() => {
+      const el = document.querySelector(location.hash);
+      if (el) el.scrollIntoView({ block: "start", behavior: "smooth" });
+    }, 50);
+  });
+</script>
+<script>
+  let currentBlockId = null;
+
+  // Track which block is currently in the viewport
+  const observer = new IntersectionObserver(entries => {
+    entries.forEach(e => {
+      if (e.isIntersecting) {
+        currentBlockId = e.target.dataset.blockId;
+      }
+    });
+  }, { threshold: 0.6 });
+
+  document.querySelectorAll(".lesson-block").forEach(el => observer.observe(el));
+
+  // Heartbeat to track time spent per block
+  setInterval(() => {
+    // Only send heartbeat if a block is actually in view
+    if (currentBlockId) {
+      fetch("{{ url_for('main.lesson_heartbeat') }}", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({
+          attempt_id: "{{ attempt.id }}",
+          lesson_block_id: currentBlockId,
+          seconds_delta: 10,
+        })
+      }).catch(err => console.error("Heartbeat failed", err));
+    }
+  }, 10000);
+</script>
+{% endblock %}

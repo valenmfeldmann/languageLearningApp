@@ -1,0 +1,16 @@
+{% extends "base.html" %}
+
+{% block content %}
+  <h1>{{ lesson.title }}</h1>
+  {% if lesson.description %}<p>{{ lesson.description }}</p>{% endif %}
+
+  <hr>
+
+  {% for b in blocks %}
+    {% set tpl = "lessons/blocks/" ~ b.type ~ ".html" %}
+    <div class="lesson-block" data-block-id="{{ b.id }}">
+      {% include tpl ignore missing %}
+    </div>
+    <hr>
+  {% endfor %}
+{% endblock %}

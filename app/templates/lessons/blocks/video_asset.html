@@ -1,0 +1,18 @@
+{% set _block = (block if block is defined else b) %}
+{% set p = _block.payload_json or {} %}
+
+{% if p.get("ref") %}
+  <video
+    src="{{ url_for('lessons.asset', lesson_id=lesson.id, ref=p.get('ref')) }}"
+    {% if p.get("controls", True) %}controls{% endif %}
+    {% if p.get("autoplay") %}autoplay muted{% endif %}
+    preload="metadata"
+    style="max-width:100%; height:auto;"
+  ></video>
+
+  {% if p.get("caption") %}
+    <div><em>{{ p.get("caption") }}</em></div>
+  {% endif %}
+{% else %}
+  <em>(no video selected)</em>
+{% endif %}

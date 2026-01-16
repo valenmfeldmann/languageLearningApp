@@ -1,0 +1,163 @@
+{% extends "base.html" %}
+{% block content %}
+
+{% from "lessons/macros/typed.html" import render_typed %}
+
+<style>
+  .dark-field {
+    background: rgba(255,255,255,0.06);
+    color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    padding: 10px 12px;
+    outline: none;
+  }
+  .dark-field::placeholder { color: rgba(255,255,255,0.38); }
+  .dark-field:focus {
+    border-color: rgba(120, 200, 255, 0.55);
+    box-shadow: 0 0 0 3px rgba(120, 200, 255, 0.12);
+  }
+
+  /* Select dropdown options (browser-dependent, but helps) */
+  select.dark-field option {
+    background: #0b0f14;
+    color: rgba(255,255,255,0.92);
+  }
+
+  /* Keep the “Search” button consistent too if needed */
+  .dark-btn {
+    background: rgba(255,255,255,0.08);
+    color: rgba(255,255,255,0.92);
+    border: 1px solid rgba(255,255,255,0.14);
+    border-radius: 10px;
+    padding: 10px 14px;
+    cursor: pointer;
+  }
+  .dark-btn:hover { background: rgba(255,255,255,0.12); }
+
+  .choice-btn img, .choice-btn video {
+    max-width: 100%;
+    height: auto;
+    display: block;
+    border-radius: 10px;
+  }
+
+  .choice-btn {
+    display: block;
+    width: 100%;
+    text-align: left;
+    padding: 14px 16px;
+    margin: 10px 0;
+    border-radius: 12px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: white;
+    font-size: 16px;
+    cursor: pointer;
+    transition: background 0.15s, transform 0.05s;
+  }
+  .choice-btn:hover { background: rgba(255,255,255,0.16); }
+  .choice-btn:active { transform: scale(0.98); }
+
+  /* If render_typed outputs code-ish text, keep it readable */
+  .choice-btn pre, .choice-btn code {
+    white-space: pre-wrap;
+    word-break: break-word;
+    color: rgba(255,255,255,0.9);
+  }
+</style>
+
+
+<div style="max-width: 760px; margin: 0 auto; padding: 24px;">
+  <h1>Trivia</h1>
+
+  <form method="get" action="{{ url_for('appui.trivia_page') }}"
+        style="display:flex; gap:8px; margin: 12px 0; flex-wrap:wrap; align-items:center;">
+    <select name="subject" class="dark-field">
+      <option value="">All subjects</option>
+      {% for s in subjects %}
+        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
+          {{ s.name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <input name="q" value="{{ q or '' }}" placeholder="Search (lesson title/desc/code)"
+           class="dark-field">
+
+    <button class="dark-btn" type="submit">
+      Search
+    </button>
+  </form>
+
+  {% if not block %}
+    <p>No trivia question available.</p>
+  {% else %}
+    <div style="
+      border: 1px solid rgba(255,255,255,0.15);
+      border-radius: 16px;
+      padding: 24px;
+      background: rgba(0,0,0,0.45);
+      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
+    ">
+
+      <!-- Source / metadata -->
+      <div style="
+        opacity: 0.65;
+        font-size: 13px;
+        margin-bottom: 14px;
+      ">
+        Source: <b>{{ lesson.title }}</b> ({{ lesson.code }})
+        {% if lesson.subject_code %} — {{ lesson.subject_code }}{% endif %}
+      </div>
+
+      <!-- PROMPT -->
+      <div style="
+        font-size: 22px;
+        line-height: 1.4;
+        font-weight: 500;
+        color: #ffffff;
+        margin-bottom: 20px;
+      ">
+        {% set prompt_val = block.payload_json.get("prompt", "") %}
+        {{ render_typed(prompt_val, lesson.id) }}
+      </div>
+
+      <!-- ANSWERS -->
+      <form method="post" action="{{ url_for('appui.trivia_answer') }}">
+        <input type="hidden" name="block_id" value="{{ block.id }}">
+        <input type="hidden" name="subject" value="{{ subject_code or '' }}">
+        <input type="hidden" name="q" value="{{ q or '' }}">
+
+        {% for c in block.payload_json.get("choices", []) %}
+          <button class="choice-btn"
+                  name="choice_index"
+                  value="{{ loop.index0 }}">
+            {{ render_typed(c, lesson.id) }}
+          </button>
+        {% endfor %}
+      </form>
+
+      <!-- BAD QUESTION -->
+      <form method="post" action="{{ url_for('appui.trivia_bad_vote') }}" style="margin-top: 14px;">
+        <input type="hidden" name="block_id" value="{{ block.id }}">
+        <input type="hidden" name="subject" value="{{ subject_code or '' }}">
+        <input type="hidden" name="q" value="{{ q or '' }}">
+
+        <button style="
+          padding: 8px 12px;
+          border-radius: 10px;
+          border: 1px solid #a44;
+          background: rgba(120,20,20,0.15);
+          color: #ffb3b3;
+          font-size: 13px;
+          cursor: pointer;
+        ">
+          Vote: bad question
+        </button>
+      </form>
+    </div>
+  {% endif %}
+</div>
+
+{% endblock %}

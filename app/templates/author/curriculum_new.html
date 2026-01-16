@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+{% block title %}New Curriculum{% endblock %}
+
+{% block content %}
+  <h1>Create curriculum</h1>
+
+  <form method="POST" action="{{ url_for('author.curriculum_new_post') }}">
+    <div style="margin: 10px 0;">
+      <label>Code (unique slug)</label><br>
+      <input type="text" name="code" required placeholder="spanish_week_1" style="width: 420px; max-width: 100%;">
+    </div>
+
+    <div style="margin: 10px 0;">
+      <label>Title</label><br>
+      <input type="text" name="title" required placeholder="Spanish Week 1" style="width: 420px; max-width: 100%;">
+    </div>
+
+    <label>Subject</label>
+    <select name="subject_code" class="dark-field">
+      <option value="">— Select subject —</option>
+      {% for s in subjects %}
+        <option value="{{ s.code }}">{{ s.name }}</option>
+      {% endfor %}
+    </select>
+
+
+    <div style="margin: 10px 0;">
+      <label>Description (optional)</label><br>
+      <textarea name="description" rows="3" style="width: 620px; max-width: 100%;"></textarea>
+    </div>
+
+    <div style="margin-top: 14px;">
+      <button type="submit">Create</button>
+      <a href="{{ url_for('author.import_form') }}" style="margin-left: 10px;">Author home</a>
+    </div>
+  </form>
+{% endblock %}

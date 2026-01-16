@@ -1,0 +1,191 @@
+============================================================
+------------------------------------------------------------
+
+
+INSERT INTO "plan" (code, stripe_price_id, monthly_amount_cents, active, created_at)
+VALUES ('base', 'price_1SfClWD2igvVKX3LKDnAob3X', 885, true, NOW())
+ON CONFLICT (code)
+DO UPDATE SET
+  stripe_price_id = EXCLUDED.stripe_price_id,
+  monthly_amount_cents = EXCLUDED.monthly_amount_cents,
+  active = EXCLUDED.active;
+
+------------------------------------------------------------
+
+
+-- requires pgcrypto (often already enabled)
+INSERT INTO access_asset (id, code, asset_type, curriculum_id, scale, created_at)
+VALUES ('asset_AN', 'AN', 'access_note', NULL, 100, NOW())
+ON CONFLICT (code) DO NOTHING;
+
+------------------------------------------------------------
+
+
+INSERT INTO access_account (id, owner_user_id, account_type, currency_code, created_at)
+VALUES
+  ('treasury',     NULL, 'treasury',     'access_note', NOW()),
+  ('rewards_pool', NULL, 'rewards_pool', 'access_note', NOW()),
+  ('burn',         NULL, 'burn',         'access_note', NOW())
+ON CONFLICT (id) DO NOTHING;
+
+------------------------------------------------------------
+
+-- HERE
+
+INSERT INTO access_account (id, owner_user_id, account_type, currency_code, created_at)
+SELECT
+  md5(u.id || ':wallet'),
+  u.id,
+  'user_wallet',
+  'access_note',
+  NOW()
+FROM "user" u
+WHERE NOT EXISTS (
+  SELECT 1
+  FROM access_account a
+  WHERE a.owner_user_id = u.id
+    AND a.account_type = 'user_wallet'
+);
+
+------------------------------------------------------------
+
+
+INSERT INTO access_balance (account_id, asset_id, balance, updated_at)
+SELECT
+  a.id,
+  s.id AS asset_id,
+  0,
+  NOW()
+FROM access_account a
+JOIN access_asset s ON s.code = 'AN'
+LEFT JOIN access_balance b
+  ON b.account_id = a.id AND b.asset_id = s.id
+WHERE b.account_id IS NULL;
+
+------------------------------------------------------------
+
+SELECT
+  a.owner_user_id,
+  u.name,
+  u.email,
+  b.balance,
+  a.account_type,
+  sub.status
+FROM access_account a
+JOIN access_balance b
+  ON b.account_id = a.id
+JOIN access_asset s
+  ON s.id = b.asset_id AND s.code = 'AN'
+JOIN "user" u
+  ON u.id = a.owner_user_id
+LEFT JOIN subscription sub
+  ON sub.user_id = u.id
+WHERE a.account_type = 'user_wallet';
+
+
+------------------------------------------------------------
+-- Just to check
+
+SELECT * FROM access_asset WHERE code='AN';
+SELECT account_type, count(*) FROM access_account GROUP BY account_type;
+SELECT count(*) FROM access_balance;
+SELECT count(*) FROM access_balance b
+JOIN access_asset s ON s.id=b.asset_id
+WHERE s.code='AN';
+
+------------------------------------------------------------
+
+-- 1) asset code should be globally unique
+CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_code
+ON access_asset (code);
+
+------------------------------------------------------------
+
+-- 2) (optional but very nice) one share-asset per curriculum
+CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_curriculum_share
+ON access_asset (curriculum_id)
+WHERE asset_type = 'curriculum_share';
+
+------------------------------------------------------------
+============================================================
+
+
+# Setup webhooks
+stripe login
+stripe listen --forward-to localhost:5000/billing/webhook
+
+
+# Delete + reset db
+docker-compose down -v
+docker-compose up -d
+docker-compose ps
+rm -rf migrations/versions/*
+flask --app app:create_app db init
+flask --app app:create_app db migrate -m "initial schema"
+flask --app app:create_app db upgrade
+'''run the insert for the plan'''
+
+# Align stripe and db balances
+flask --app app:create_app stripe-import-users
+flask --app app:create_app stripe-sync-all
+
+
+
+# This one is for making sure the ledger behaves correctly (Expected: zero rows)
+select txn_id, sum(delta)
+from access_entry
+group by txn_id
+having sum(delta) != 0;
+
+
+
+
+# This is for reseting myself after I delete valenmfeldmann@gmail.com from stript - this is so I can get the ~200 ish bonus/trial again
+
+-- -- pick the user you’re logged in as
+-- SELECT id, email, stripe_customer_id FROM "user" WHERE email = 'valenmfeldmann@gmail.com';
+
+-- -- clear Stripe linkage + cached balance + pending clawback state
+-- UPDATE "user"
+-- SET
+--   stripe_customer_id = NULL,
+--   stripe_balance_cents = 0,
+--   unsubscribe_clawback_pending_cents = 0,
+--   unsubscribe_clawback_pending_txn_id = NULL
+-- WHERE email = 'valenmfeldmann@gmail.com';
+
+
+-- -- 1) wipe recorded promo grants (or just the signup one if you can identify it)
+-- DELETE FROM billing_credit_grant
+-- WHERE user_id = '85c44a03-1c6b-4e69-9669-53e10784dc7d'
+--   AND is_promo = TRUE;
+
+-- -- 2) clear any pending clawback markers on the user
+-- UPDATE "user"
+-- SET
+--   unsubscribe_clawback_pending_cents = 0,
+--   unsubscribe_clawback_pending_txn_id = NULL
+-- WHERE id = '85c44a03-1c6b-4e69-9669-53e10784dc7d';
+
+
+
+-------------------------------------------------------------------------------------------------------------------------
+Currency sinks:
+- Promotion + access data (no tax or limit, but expensive)
+- tax transfers + limit transfers (buy lesson materials, take premium lessons, play games, trade for trial credits, buy partial ownership in lesson)
+
+- “Stake 50 credits to commit to a 7-day streak” - make sure negative EV after selection bias
+- Charge currency to get in contact with someone (celebrity, etc.)
+
+- Status symbols for ultra-wealthy (pay for access to events + privilege of buying merch)
+- Bonds (maybe)
+
+-------------------------------------------------------------------------------------------------------------------------
+Notes to self
+
+We are working on getting the flat credits to be stored in the db so that the pricing page can show the proper number of credits
+
+We are trying to get the clawback to work when people unsubscribe
+
+
+{"kind":"image","value":"assets/cmu.jpg"}

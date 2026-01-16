@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+{% block content %}
+
+<h1>Welcome</h1>
+
+{% if continue_lesson %}
+  <p>
+    <a class="btn btn-primary"
+       href="{{ url_for('main.lesson_page', lesson_code=continue_lesson.code, src='home') }}">
+      Continue {{ continue_lesson.title }}
+    </a>
+  </p>
+{% endif %}
+
+<ul>
+  <li><a href="{{ url_for('main.lessons_index') }}">Lessons</a></li>
+  <li><a href="{{ url_for('main.curriculum_index') }}">Curriculums</a></li>
+  <li><a href="{{ url_for('main.trivia_page') }}">Trivia</a></li>
+</ul>
+
+{% if current_user.is_authenticated %}
+  <hr>
+  <h3>Author</h3>
+  <ul>
+    <li><a href="{{ url_for('author.lesson_index') }}">My Lessons</a></li>
+    <li><a href="{{ url_for('author.curriculum_new_form') }}">New Curriculum</a></li>
+    <li><a href="{{ url_for('author.lesson_new_form') }}">New Lesson</a></li>
+  </ul>
+{% endif %}
+
+{% endblock %}

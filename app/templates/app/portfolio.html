@@ -1,0 +1,70 @@
+{% extends "base.html" %}
+{% block content %}
+
+<div class="container" style="max-width: 980px; margin: 0 auto; padding: 24px;">
+  <h1 style="margin-bottom: 6px;">Portfolio</h1>
+  <div style="opacity: 0.85; margin-bottom: 18px;">
+    A snapshot of what you own (valued in AN).
+  </div>
+
+  <div class="card" style="padding: 16px; margin-bottom: 16px;">
+    <div style="display: flex; gap: 18px; flex-wrap: wrap;">
+      <div>
+        <div style="opacity: 0.8; font-size: 12px;">Total Market Value</div>
+        <div style="font-size: 26px; font-weight: 700;">{{ grand_market_an }} AN</div>
+      </div>
+      <div>
+        <div style="opacity: 0.8; font-size: 12px;">Total Liquidation Value</div>
+        <div style="font-size: 26px; font-weight: 700;">{{ grand_liquidation_an }} AN</div>
+      </div>
+      <div style="margin-left: auto;">
+        <div style="opacity: 0.8; font-size: 12px;">Cash (AN)</div>
+        <div style="font-size: 18px; font-weight: 650;">{{ cash_an }} AN</div>
+      </div>
+    </div>
+  </div>
+
+  <div class="card" style="padding: 0; overflow: hidden;">
+    <div style="padding: 14px 16px; border-bottom: 1px solid rgba(255,255,255,0.08); font-weight: 650;">
+      Holdings
+    </div>
+
+    {% if rows|length == 0 %}
+      <div style="padding: 16px; opacity: 0.85;">
+        No holdings yet. Once you own curriculum shares, they’ll show up here.
+      </div>
+    {% else %}
+      <table style="width: 100%; border-collapse: collapse;">
+        <thead>
+          <tr style="text-align: left; opacity: 0.85; font-size: 12px;">
+            <th style="padding: 12px 16px;">Curriculum</th>
+            <th style="padding: 12px 8px;">Shares</th>
+            <th style="padding: 12px 8px;">Last Price</th>
+            <th style="padding: 12px 8px;">Market Value</th>
+            <th style="padding: 12px 16px;">Liquidation Value</th>
+          </tr>
+        </thead>
+        <tbody>
+          {% for r in rows %}
+          <tr style="border-top: 1px solid rgba(255,255,255,0.07);">
+            <td style="padding: 12px 16px;">
+              <div style="font-weight: 650;">{{ r.title }}</div>
+              <div style="opacity: 0.7; font-size: 12px;">{{ r.curriculum_id }}</div>
+            </td>
+            <td style="padding: 12px 8px;">{{ r.shares }}</td>
+            <td style="padding: 12px 8px;">{{ r.last_price_an }} AN</td>
+            <td style="padding: 12px 8px;">{{ r.market_value_an }} AN</td>
+            <td style="padding: 12px 16px;">{{ r.liquidation_value_an }} AN</td>
+          </tr>
+          {% endfor %}
+        </tbody>
+      </table>
+    {% endif %}
+  </div>
+
+  <div style="margin-top: 14px; opacity: 0.75; font-size: 12px;">
+    Market value uses the most recent trade price. Liquidation value assumes you sell into current bids only (no new buyers magically appear).
+  </div>
+</div>
+
+{% endblock %}

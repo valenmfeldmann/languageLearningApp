@@ -1,0 +1,85 @@
+{# app/templates/lessons/blocks/quiz_mcq.html #}
+
+{% set _block = (block if block is defined else b) %}
+{% set answered_block_id = request.args.get("quiz_block_id") %}
+{% set quiz_correct = request.args.get("quiz_correct") %}
+{% set show_feedback = (answered_block_id == _block.id) and (quiz_correct is not none) %}
+{% set payload = _block.payload_json or {} %}
+{% set prompt = payload.get("prompt") %}
+{% set choices = payload.get("choices", []) %}
+{% set mode = payload.get("mode", "graded") %}
+{% set can_submit = (attempt is defined and attempt) %}
+
+{% macro render_typed(val, lesson_id) %}
+  {% if val is mapping %}
+    {% set k = val.get("kind", "text") %}
+    {% set v = val.get("value", "") %}
+
+    {% if k == "text" %}
+      {{ v }}
+    {% elif k == "image" %}
+      <img src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
+           style="max-width:320px; height:auto;">
+    {% elif k == "audio" %}
+      <audio controls src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></audio>
+    {% elif k == "video" %}
+      <video controls preload="metadata"
+             style="max-width:480px; height:auto;"
+             src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></video>
+    {% else %}
+      {# future-proof fallback #}
+      <code>[{{ k }}]</code> {{ v }}
+    {% endif %}
+  {% else %}
+    {{ val }}
+  {% endif %}
+{% endmacro %}
+
+
+<div style="margin: 12px 0;">
+  <div style="font-weight:600; margin-bottom:6px;">
+    {{ render_typed(prompt, lesson.id) }}
+  </div>
+
+  <form method="post" action="{{ url_for('main.quiz_answer', lesson_code=lesson.code) }}">
+    <input type="hidden" name="quiz_block_id" value="{{ _block.id }}">
+    {% if attempt is defined and attempt %}
+      <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
+    {% endif %}
+
+    <div style="margin: 8px 0;">
+      {% for c in choices %}
+        <div style="margin: 4px 0;">
+          <label style="display:flex; gap:8px; align-items:center;">
+            <input type="radio" name="choice_index" value="{{ loop.index0 }}" required>
+            {{ render_typed(c, lesson.id) }}
+          </label>
+        </div>
+      {% endfor %}
+    </div>
+
+    <button type="submit" {% if not can_submit %}disabled{% endif %}>
+      {% if mode != "no_check" %}Check{% else %}Submit{% endif %}
+    </button>
+
+    {% if show_feedback %}
+      <div style="
+          margin-top:10px;
+          padding:10px 12px;
+          border-radius:12px;
+          border:1px solid rgba(233,237,247,.12);
+          background: rgba(18,24,41,.75);
+        ">
+        {% if quiz_correct == "1" %}
+          <span style="color: var(--ok); font-weight:700;">✓ Correct</span>
+        {% else %}
+          <span style="color: var(--danger); font-weight:700;">✗ Not quite</span>
+        {% endif %}
+      </div>
+    {% endif %}
+
+    {% if not can_submit %}
+      <div style="font-size:12px; opacity:0.7;">(preview mode)</div>
+    {% endif %}
+  </form>
+</div>

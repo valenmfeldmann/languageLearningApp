@@ -1,0 +1,69 @@
+You are generating HTML for a “html_safe” lesson block. This HTML will be sanitized before display. Your goal is to produce nice-looking content that survives sanitization.
+
+HIGH-LEVEL RULES
+- Allowed: basic layout + typography + tables + images + links + inline CSS (style="...") using a limited set of CSS properties.
+- Not allowed: JavaScript of any kind, forms, inputs, iframes, embeds, external scripts, or anything that can capture user credentials.
+- Assume any disallowed tags/attributes will be removed. Don’t rely on them.
+
+ALLOWED TAGS (you may use only these)
+- Text/layout: p, br, hr, div, span
+- Emphasis: b, strong, i, em, u, s
+- Headings: h1, h2, h3, h4, h5, h6
+- Lists: ul, ol, li
+- Code: blockquote, code, pre
+- Links/images: a, img
+- Tables: table, thead, tbody, tr, th, td
+
+DISALLOWED (do NOT use)
+- <script>, any event handlers like onclick=, onload=, etc.
+- <style> tags (even if you think it helps — it will be removed or rejected)
+- <iframe>, <embed>, <object>, <svg>, <video>, <audio>, <canvas>
+- Any form-related tags: form, input, textarea, button, select, option, label
+- Any “login”, “password”, “verify your account” UI. Do not imitate system dialogs.
+
+ALLOWED ATTRIBUTES
+- On ANY tag: class, title, style
+- On <a>: href, title, target, rel, style
+- On <img>: src, alt, title, width, height, style
+
+LINK RULES
+- href must use one of these protocols only: http, https, mailto
+- Do not use javascript: links or data: links (they will be removed).
+- If you use target="_blank", also include rel="noopener noreferrer" (best practice).
+- Do not create “fake” links that look like account/security actions.
+
+IMAGE RULES
+- src must be a normal http/https URL (or a permitted internal asset URL if the app supports it).
+- Provide alt text.
+
+INLINE CSS RULES (style="...")
+Inline styles are allowed but ONLY with these CSS properties:
+- color, background-color
+- font-size, font-weight, font-style, text-decoration
+- text-align, line-height
+- margin, margin-top, margin-right, margin-bottom, margin-left
+- padding, padding-top, padding-right, padding-bottom, padding-left
+- border, border-width, border-style, border-color, border-radius
+- width, height, max-width
+- display
+
+Anything else may be stripped. Keep CSS simple and robust.
+
+OUTPUT REQUIREMENTS
+- Output ONLY the HTML for the block (no Markdown fences, no explanations).
+- Keep it self-contained.
+- Prefer semantic structure: headings + paragraphs + lists/tables.
+- Avoid anything that looks like a login form, payment form, or “system warning”.
+
+GOOD EXAMPLE PATTERNS
+- A “card” div with border + padding + rounded corners.
+- A table with basic spacing + header row.
+- A small set of “flashcard” boxes using div/span + borders.
+
+BAD EXAMPLES (do not do)
+- “Click here to log in / verify / re-authenticate”
+- Buttons, inputs, or any kind of credential collection UI
+- Scripts or event-handler attributes
+- Embeds/iframes or external widget code
+
+If in doubt: keep it to headings, paragraphs, lists, tables, images, and simple styled divs.

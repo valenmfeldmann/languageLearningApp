@@ -65,9 +65,12 @@ def upgrade():
         batch_op.create_index(batch_op.f('ix_trivia_bad_vote_subject_code'), ['subject_code'], unique=False)
         batch_op.create_index(batch_op.f('ix_trivia_bad_vote_user_id'), ['user_id'], unique=False)
 
-    with op.batch_alter_table('access_asset', schema=None) as batch_op:
-        batch_op.drop_index(batch_op.f('ux_access_asset_code'))
-        batch_op.drop_index(batch_op.f('ux_access_asset_curriculum_share'), postgresql_where="((asset_type)::text = 'curriculum_share'::text)")
+    # These indexes may not exist on a fresh DB depending on how the initial
+    # schema was created / named. Make the drops idempotent.
+    op.execute("DROP INDEX IF EXISTS ux_access_asset_code")
+    op.execute("DROP INDEX IF EXISTS ux_access_asset_curriculum_share")
+
+
 
     with op.batch_alter_table('lesson', schema=None) as batch_op:
         batch_op.add_column(sa.Column('subject_code', sa.String(), nullable=True))

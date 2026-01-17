@@ -3,3 +3,13 @@
 __pycache__/
 *.pyc
 .idea/
+
+# runtime assets / local state
+instance/
+
+# deploy runtime (do not commit)
+deploy/letsencrypt/
+deploy/certbot-www/
+
+# local runtime
+instance/

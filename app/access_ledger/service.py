@@ -139,6 +139,52 @@ def get_curriculum_share_asset(curriculum_id: str) -> AccessAsset:
     return get_or_create_asset(code=f"CURR_SHARE:{curriculum_id}", asset_type="curriculum_share", curriculum_id=curriculum_id, scale=1) # Scale is 1 because it is a share (not AN)
 
 
+def grant_signup_bonus_once(*, user_id: str, ticks: int) -> bool:
+    """
+    Grants a one-time signup bonus to the user's wallet.
+    Returns True if granted now, False if it already existed (idempotent).
+    """
+    ticks = int(ticks)
+    if ticks <= 0:
+        return False
+
+    an = get_an_asset()
+    awards_pool = get_or_create_system_account("awards_pool", currency_code="access_note")
+    wallet = get_or_create_user_wallet(user_id, currency_code="access_note")
+
+    key = f"signup_bonus:{user_id}"
+
+    # quick idempotency check so caller can know whether we granted
+    existing = AccessTxn.query.filter_by(idempotency_key=key).one_or_none()
+    if existing:
+        return False
+
+    post_access_txn(
+        event_type="signup_bonus",
+        idempotency_key=key,
+        actor_user_id=user_id,
+        context_type="user",
+        context_id=user_id,
+        memo_json={"ticks": ticks},
+        forbid_user_overdraft=True,
+        entries=[
+            EntrySpec(
+                account_id=awards_pool.id,
+                asset_id=an.id,
+                delta=-ticks,
+                entry_type="signup_bonus",
+            ),
+            EntrySpec(
+                account_id=wallet.id,
+                asset_id=an.id,
+                delta=+ticks,
+                entry_type="signup_bonus",
+            ),
+        ],
+    )
+    return True
+
+
 
 
 @dataclass(frozen=True)

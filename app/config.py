@@ -10,3 +10,5 @@ class Config:
     STRIPE_SECRET_KEY = os.environ.get("STRIPE_SECRET_KEY")
     STRIPE_WEBHOOK_SECRET = os.environ.get("STRIPE_WEBHOOK_SECRET")
 
+    # One-time signup bonus (in ticks). 10 AN = 10000 ticks.
+    SIGNUP_BONUS_TICKS = int(os.getenv("SIGNUP_BONUS_TICKS", "10000"))

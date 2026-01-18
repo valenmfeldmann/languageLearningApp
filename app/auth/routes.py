@@ -11,6 +11,8 @@ from app.extensions import db
 from ..billing.credits import grant_signup_credit_once  # wherever this lives
 from flask import redirect, url_for
 from ..access_ledger.service import get_or_create_user_wallet
+from flask import current_app, flash
+from app.access_ledger.service import grant_signup_bonus_once
 
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
@@ -43,8 +45,13 @@ def google_callback():
 
     # 1.5) Ensure wallet exists (THIS is the fix)
     get_or_create_user_wallet(user.id, currency_code="access_note")
-    db.session.commit()   # <-- add this (important!)
+    # db.session.commit()   # <-- add this (important!)
 
+
+    bonus_ticks = int(current_app.config.get("SIGNUP_BONUS_TICKS", 10000))
+    if grant_signup_bonus_once(user_id=user.id, ticks=bonus_ticks):
+        # This assumes your base.html reads flash categories like "reward:<ticks>" to run rewardFX(ticks)
+        flash(f"Signup bonus: +{bonus_ticks // 1000} AN", f"reward:{bonus_ticks}")
 
     # 2) Ensure subscription row exists (DB bookkeeping)
     sub = Subscription.query.filter_by(user_id=user.id).one_or_none()

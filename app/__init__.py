@@ -17,6 +17,10 @@ from .models import User
 from werkzeug.routing import BuildError
 from flask import url_for
 
+from flask import request, redirect, url_for, flash
+from flask_login import current_user
+from app.billing.access import has_access
+
 
 
 @login_manager.user_loader
@@ -161,6 +165,58 @@ def create_app():
                 "new_curriculum": safe_url("author.curriculum_new_form"),
             }
         }
+
+    @app.before_request
+    def require_subscription_everywhere():
+        # Always allow static files
+        if request.endpoint == "static":
+            return None
+
+        if request.path == "/favicon.ico":
+            return None
+
+        # Let unauthenticated users proceed (your routes can redirect to login)
+        if not current_user.is_authenticated:
+            return None
+
+        # Allowlist: ONLY things visible without subscription
+        allowed_endpoints = {
+            # public-ish pages you want accessible without subscription
+            "main.home",  # GET /
+            "main.app_home",  # GET /app
+            "appui.account",  # GET /app/account
+
+            # pricing pages
+            "billing.pricing",  # GET /billing/pricing
+            "main.pricing_shortcut",  # GET /pricing (your shortcut route)
+
+            # stripe webhook must always work
+            "billing.stripe_webhook",  # POST /billing/webhook
+
+            # auth flow
+            "auth.login",
+            "auth.google_callback",
+            "auth.logout",
+        }
+
+        # If you want "/app" home or "/" home accessible, add the real endpoint name(s) here.
+        # We'll add it after you run the grep below.
+        # allowed_endpoints.add("main.index")
+
+        if request.endpoint in allowed_endpoints:
+            return None
+
+        # If not subscribed: block everything else
+        if not has_access(current_user):
+            # For POST/PUT/etc, don't redirect (prevents weird form submits)
+            if request.method != "GET":
+                return ("Subscription required", 403)
+
+            flash("No active subscription. Please choose a plan.", "warning")
+            return redirect(url_for("billing.pricing"))
+
+        return None
+
 
     return app
 

@@ -32,8 +32,9 @@ ssh ${SERVER_USER}@${SERVER_HOST} <<'EOF'
   echo "📦 Running migrations..."
   docker compose exec -T web python -m flask db upgrade
 
-  echo "🔄 Restarting services..."
-  docker compose up -d
+  echo "🔄 Restarting services (force recreate)..."
+  docker compose down
+  docker compose up -d --force-recreate
 
   echo "✅ Deploy complete"
 EOF

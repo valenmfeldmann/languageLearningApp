@@ -10,6 +10,8 @@ from app.models import Subscription
 from app.extensions import db
 from ..billing.credits import grant_signup_credit_once  # wherever this lives
 from flask import redirect, url_for
+from ..access_ledger.service import get_or_create_user_wallet
+
 bp = Blueprint("auth", __name__, url_prefix="/auth")
 
 
@@ -38,6 +40,11 @@ def google_callback():
         user.image = picture
 
     db.session.commit()  # ensures user.id exists
+
+    # 1.5) Ensure wallet exists (THIS is the fix)
+    get_or_create_user_wallet(user.id, currency_code="access_note")
+    db.session.commit()   # <-- add this (important!)
+
 
     # 2) Ensure subscription row exists (DB bookkeeping)
     sub = Subscription.query.filter_by(user_id=user.id).one_or_none()

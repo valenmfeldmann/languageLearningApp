@@ -8,13 +8,6 @@ import uuid
 from sqlalchemy import func
 from dataclasses import dataclass
 from typing import Optional
-from app.access_ledger.service import (
-    post_access_txn,
-    get_or_create_system_account,
-    get_an_asset,
-    get_or_create_user_wallet,
-    EntrySpec,
-)
 
 from sqlalchemy.exc import IntegrityError
 

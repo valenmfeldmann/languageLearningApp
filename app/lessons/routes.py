@@ -13,8 +13,22 @@ import mimetypes
 from pathlib import Path
 from pathlib import Path
 from flask import abort, current_app
+from flask import redirect, url_for, flash
+from app.billing.access import has_access
+
 
 bp = Blueprint("lessons", __name__, url_prefix="/lessons")
+
+@bp.before_request
+def require_paid_access_for_lessons():
+    # Let login_required handle unauthenticated users on each route.
+    if not current_user.is_authenticated:
+        return None
+
+    if not has_access(current_user):
+        flash("No active subscription. Please choose a plan.", "warning")
+        return redirect(url_for("billing.pricing"))
+
 
 
 @bp.get("/<lesson_id>/preview")
@@ -83,17 +97,17 @@ def attempt_heartbeat():
 
 
 
-@bp.get("/<lesson_id>/asset/<path:ref>")
-@login_required
-def serve_asset(lesson_id: str, ref: str):
-    # ref will look like "assets/foo.png"
-    lesson = Lesson.query.get_or_404(lesson_id)
-
-    a = LessonAsset.query.filter_by(lesson_id=lesson_id, ref=ref).one_or_none()
-    if not a:
-        abort(404)
-
-    return send_file(a.storage_path, mimetype=a.content_type or "application/octet-stream")
+# @bp.get("/<lesson_id>/asset/<path:ref>")
+# @login_required
+# def serve_asset(lesson_id: str, ref: str):
+#     # ref will look like "assets/foo.png"
+#     lesson = Lesson.query.get_or_404(lesson_id)
+#
+#     a = LessonAsset.query.filter_by(lesson_id=lesson_id, ref=ref).one_or_none()
+#     if not a:
+#         abort(404)
+#
+#     return send_file(a.storage_path, mimetype=a.content_type or "application/octet-stream")
 
 
 @bp.get("/<lesson_id>/asset/<path:ref>")

@@ -13,6 +13,9 @@ from flask import redirect, flash, jsonify
 from sqlalchemy import func
 import random
 from datetime import datetime
+from flask import redirect, flash, request
+from flask_login import current_user
+from app.billing.access import has_access
 
 from app.models import Lesson, LessonBlock, LessonSubject, TriviaAnswer, TriviaBadVote
 from app.access_ledger.service import (
@@ -23,9 +26,34 @@ from app.access_ledger.service import (
 from .. import db
 
 
+
+
 @login_required
 def _get_subscription():
     return Subscription.query.filter_by(user_id=current_user.id).one_or_none()
+
+
+@bp.before_request
+def require_paid_access_for_appui():
+    # Allow logged-out users to see public pages (like public ledger).
+    if not current_user.is_authenticated:
+        return None
+
+    # Allow these pages even without subscription:
+    allowed_endpoints = {
+        "appui.account",       # lets them see "Has access: NO"
+        "appui.public_ledger", # if you want ledger public
+        "appui.ledger_txn",    # public txn view
+    }
+
+    if request.endpoint in allowed_endpoints:
+        return None
+
+    if not has_access(current_user):
+        flash("No active subscription. Please choose a plan.", "warning")
+        return redirect(url_for("billing.pricing"))
+
+
 
 @bp.get("/account")
 @login_required

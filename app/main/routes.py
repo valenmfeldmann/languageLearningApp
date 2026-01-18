@@ -224,7 +224,6 @@ def home():
 
 
 @bp.get("/app")
-@login_required
 def app_home():
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))

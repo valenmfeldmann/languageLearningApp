@@ -1,9 +1,31 @@
 <!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
   <title>{% block title %}LanguageLearningApp{% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
+
+  <style>
+    /* Basic responsive defaults */
+    img, video { max-width: 100%; height: auto; }
+    .container { max-width: 1100px; margin: 0 auto; padding: 0 16px; }
+
+    /* Mobile tweaks */
+    @media (max-width: 768px) {
+      .container { padding: 0 12px; }
+
+      /* If your top nav is a flex row, let it wrap */
+      .top-nav { flex-wrap: wrap; gap: 10px; }
+
+      /* Reduce giant headings on phone */
+      h1 { font-size: 2rem; }
+      h2 { font-size: 1.4rem; }
+
+      /* Make “card” sections fit */
+      .card, .panel { width: 100%; }
+    }
+  </style>
+
 
   <style>
     :root{

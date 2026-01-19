@@ -25,6 +25,8 @@ services:
     build: .
     command: python run_payout_daemon.py
     env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://postgres:postgres@db:5432/appdb
     depends_on:
       - db
     restart: unless-stopped

@@ -6,6 +6,8 @@ SERVER_HOST=143.198.15.118
 SERVER_DIR=languageLearningApp
 BRANCH=main
 
+RESET_DB="${RESET_DB:-0}"
+
 echo "🔍 Checking git status..."
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "❌ You have uncommitted changes. Commit first."
@@ -19,7 +21,7 @@ echo "⬆️ Pushing to GitHub..."
 git push origin "$BRANCH"
 
 echo "🚀 Deploying to server..."
-ssh "${SERVER_USER}@${SERVER_HOST}" <<'EOF'
+ssh "${SERVER_USER}@${SERVER_HOST}" <<EOF
   set -euo pipefail
   cd ~/languageLearningApp
 
@@ -29,18 +31,26 @@ ssh "${SERVER_USER}@${SERVER_HOST}" <<'EOF'
   echo "🐳 Building images..."
   docker compose build
 
-  echo "🚀 Starting db + web..."
-  docker compose up -d db web
+  if [ "$RESET_DB" = "1" ]; then
+    echo "💣 RESET_DB=1 — performing hard DB reset from models"
 
-  echo "⏳ Waiting briefly for db..."
-  sleep 2
+    docker compose down -v
+    docker compose up -d
 
-  echo "📦 Running migrations..."
-  # Use explicit --app in case FLASK_APP isn't set in env
-  docker compose exec -T web flask --app app:create_app db upgrade
+    ./scripts/hard_reset_schema_from_models.sh
+  else
+    echo "🚀 Starting db + web..."
+    docker compose up -d db web
 
-  echo "🔄 Bringing up full stack (including worker if defined)..."
-  docker compose up -d
+    echo "⏳ Waiting briefly for db..."
+    sleep 2
+
+    echo "📦 Running migrations..."
+    docker compose exec -T web flask --app app:create_app db upgrade
+
+    echo "🔄 Bringing up full stack..."
+    docker compose up -d
+  fi
 
   echo "✅ Deploy complete"
 EOF

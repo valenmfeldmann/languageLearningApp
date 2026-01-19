@@ -115,19 +115,39 @@ stripe login
 stripe listen --forward-to localhost:5000/billing/webhook
 
 
+# # Delete + reset db
+# docker-compose down -v
+# docker-compose up -d
+# docker-compose ps
+# rm -rf migrations/versions/*
+# flask --app app:create_app db init
+# flask --app app:create_app db migrate -m "initial schema"
+# flask --app app:create_app db upgrade
+# '''run the insert for the plan'''
+
+# Delete + reset db new:
 # Delete + reset db
 docker-compose down -v
-docker-compose up -d
+# Start ONLY local services (skip nginx/certbot locally)
+docker-compose up -d db web worker
 docker-compose ps
+# Migrations:
+# Only do this if you intend to regenerate migrations from scratch:
 rm -rf migrations/versions/*
-flask --app app:create_app db init
-flask --app app:create_app db migrate -m "initial schema"
-flask --app app:create_app db upgrade
-'''run the insert for the plan'''
+# Run migrations INSIDE the container (so DB hostname/ports are correct)
+docker-compose exec -T web flask --app app:create_app db migrate -m "initial schema"
+docker-compose exec -T web flask --app app:create_app db upgrade
+# run the insert for the plan (same as before)
 
-# Align stripe and db balances
-flask --app app:create_app stripe-import-users
-flask --app app:create_app stripe-sync-all
+# Align stripe and db balances (new)
+docker-compose exec -T web flask --app app:create_app stripe-import-users
+docker-compose exec -T web flask --app app:create_app stripe-sync-all
+
+
+
+# # Align stripe and db balances
+# flask --app app:create_app stripe-import-users
+# flask --app app:create_app stripe-sync-all
 
 
 

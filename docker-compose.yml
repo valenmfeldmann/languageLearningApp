@@ -21,6 +21,16 @@ services:
       - "8000"
     restart: unless-stopped
 
+  worker:
+    # use the same image as web so it has the same code + deps
+    image: your_web_image_name_here   # OR: build: .  (match whatever web uses)
+    command: python run_payout_daemon.py
+    env_file: .env
+    depends_on:
+      - db
+    restart: unless-stopped
+
+
   nginx:
     image: nginx:1.27-alpine
     depends_on:

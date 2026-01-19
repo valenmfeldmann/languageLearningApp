@@ -13,28 +13,34 @@ if ! git diff --quiet || ! git diff --cached --quiet; then
 fi
 
 echo "⬇️ Pulling latest from origin..."
-git pull --ff-only origin $BRANCH
+git pull --ff-only origin "$BRANCH"
 
 echo "⬆️ Pushing to GitHub..."
-git push origin $BRANCH
+git push origin "$BRANCH"
 
 echo "🚀 Deploying to server..."
-ssh ${SERVER_USER}@${SERVER_HOST} <<'EOF'
-  set -e
+ssh "${SERVER_USER}@${SERVER_HOST}" <<'EOF'
+  set -euo pipefail
   cd ~/languageLearningApp
 
   echo "📥 Pulling code..."
   git pull --ff-only
 
-  echo "🐳 Rebuilding containers..."
-  docker compose build web
+  echo "🐳 Building images..."
+  docker compose build
+
+  echo "🚀 Starting db + web..."
+  docker compose up -d db web
+
+  echo "⏳ Waiting briefly for db..."
+  sleep 2
 
   echo "📦 Running migrations..."
-  docker compose exec -T web python -m flask db upgrade
+  # Use explicit --app in case FLASK_APP isn't set in env
+  docker compose exec -T web flask --app app:create_app db upgrade
 
-  echo "🔄 Restarting services (force recreate)..."
-  docker compose down
-  docker compose up -d --force-recreate
+  echo "🔄 Bringing up full stack (including worker if defined)..."
+  docker compose up -d
 
   echo "✅ Deploy complete"
 EOF

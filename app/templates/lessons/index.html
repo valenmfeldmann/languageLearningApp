@@ -4,7 +4,7 @@
 {% block content %}
   <h1>Lessons</h1>
 
-  <form method="GET" action="{{ url_for('main.lessons_index') }}" style="margin: 12px 0;">
+  <form class="lessons-filters" method="GET" action="{{ url_for('main.lessons_index') }}" style="margin: 12px 0;">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="Search…" style="width: 320px; max-width: 100%;">
     <select name="scope" style="margin-left: 6px;">
       <option value="mine" {% if scope == "mine" %}selected{% endif %}>Mine</option>

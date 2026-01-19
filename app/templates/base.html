@@ -336,6 +336,180 @@
     }
 
 
+    /* === Global themed form controls === */
+    /* Avoid styling checkboxes/radios/range/color/file buttons */
+    input:not([type="checkbox"]):not([type="radio"]):not([type="range"]):not([type="color"]):not([type="file"]),
+    textarea,
+    select {
+      width: 100%;
+      box-sizing: border-box;
+
+      background: rgba(255, 255, 255, 0.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 12px;
+
+      padding: 10px 12px;
+      line-height: 1.2;
+
+      outline: none;
+    }
+
+    textarea {
+      min-height: 120px;
+      resize: vertical;
+    }
+
+    /* Placeholder */
+    input::placeholder,
+    textarea::placeholder {
+      color: rgba(255,255,255,0.45);
+    }
+
+    /* Focus ring */
+    input:focus,
+    textarea:focus,
+    select:focus {
+      border-color: rgba(123, 184, 255, 0.55);
+      box-shadow: 0 0 0 3px rgba(123, 184, 255, 0.18);
+    }
+
+    /* Disabled */
+    input:disabled,
+    textarea:disabled,
+    select:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
+    /* iOS/Safari/Chrome autofill makes inputs yellow/white unless you override */
+    input:-webkit-autofill,
+    textarea:-webkit-autofill,
+    select:-webkit-autofill {
+      -webkit-text-fill-color: var(--text) !important;
+      box-shadow: 0 0 0px 1000px rgba(16,20,32,0.95) inset !important;
+      border: 1px solid var(--border);
+    }
+
+    /* Make small inline inputs not blow up layouts */
+    .input-inline {
+      width: auto;
+      display: inline-block;
+    }
+
+
+    /* === Selects / dropdown menus === */
+    select {
+      appearance: none;
+      -webkit-appearance: none;
+      -moz-appearance: none;
+      padding-right: 34px; /* room for arrow */
+      background-image:
+        linear-gradient(45deg, transparent 50%, rgba(255,255,255,.6) 50%),
+        linear-gradient(135deg, rgba(255,255,255,.6) 50%, transparent 50%);
+      background-position:
+        calc(100% - 18px) 50%,
+        calc(100% - 12px) 50%;
+      background-size: 6px 6px, 6px 6px;
+      background-repeat: no-repeat;
+    }
+
+    /* Try to style the dropdown list itself (works in many browsers) */
+    select option,
+    select optgroup {
+      background: #0e1320;
+      color: #e7ebff;
+    }
+
+
+
+    /* Lessons filter bar */
+    .lessons-filters,
+    .filter-bar,
+    .search-row {
+      display: grid;
+      grid-template-columns: 280px 1fr auto;
+      gap: 10px;
+      align-items: center;
+      margin: 14px 0 18px;
+    }
+
+    @media (max-width: 768px) {
+      .lessons-filters,
+      .filter-bar,
+      .search-row {
+        grid-template-columns: 1fr;
+      }
+    }
+
+    /* Make controls same height */
+    .lessons-filters input,
+    .lessons-filters select,
+    .lessons-filters button,
+    .filter-bar input,
+    .filter-bar select,
+    .filter-bar button,
+    .search-row input,
+    .search-row select,
+    .search-row button {
+      height: 40px;
+    }
+
+
+
+    /* Themed pricing card */
+    .pricing-card,
+    .pricing-box,
+    .card.pricing,
+    .panel.pricing,
+    .pricing-panel {
+      background: rgba(255,255,255,0.06);
+      color: var(--text);
+      border: 1px solid var(--border);
+      border-radius: 16px;
+      box-shadow: var(--shadow);
+    }
+
+    /* Make text inside inherit theme */
+    .pricing-card *,
+    .pricing-box *,
+    .card.pricing *,
+    .panel.pricing *,
+    .pricing-panel * {
+      color: inherit;
+    }
+
+    /* Lighten secondary text */
+    .pricing-card .muted,
+    .pricing-box .muted {
+      color: rgba(255,255,255,0.55);
+    }
+
+
+    /* Lessons filters: make button sit nicely in the 3rd column */
+    .lessons-filters button,
+    .filter-bar button,
+    .search-row button {
+      width: auto;
+      justify-self: start;
+      padding: 0 14px;
+    }
+
+    /* If the form is narrow, give it breathing room */
+    .lessons-filters,
+    .filter-bar,
+    .search-row {
+      max-width: 920px;
+    }
+
+    /* Optional: tighten vertical rhythm (helps the “no buffer” feeling) */
+    .lessons-filters input,
+    .lessons-filters select,
+    .lessons-filters button {
+      margin: 0;
+    }
+
+
   </style>
 
 
@@ -552,10 +726,6 @@
           <a class="navlink" href="{{ url_for('billing.portal') }}">Manage</a>
         {% endif %}
 
-        <!-- DEBUG: remove later -->
-        <span style="opacity:.7; font-size:12px; margin-left:10px;">
-          nav_links={{ nav_links is defined }}
-        </span>
 
         {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons) %}
           <span style="display:inline-flex; gap:10px; margin-left:14px; align-items:center;">

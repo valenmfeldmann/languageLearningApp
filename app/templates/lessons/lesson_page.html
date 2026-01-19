@@ -50,7 +50,7 @@
 
   <div class="lesson-footer">
     {% if can_complete %}
-      <form method="POST" action="{{ url_for('main.complete_lesson', lesson_code=lesson.code) }}">
+      <form class="lessons-filters" method="POST" action="{{ url_for('main.complete_lesson', lesson_code=lesson.code) }}">
         <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
         <button type="submit" class="btn-complete">✓ Complete Lesson</button>
       </form>

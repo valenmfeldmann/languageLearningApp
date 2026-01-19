@@ -424,6 +424,59 @@
   </style>
 
 
+  <style>
+    #nav-toggle {
+      display: none;
+    }
+
+    .nav-hamburger {
+      display: none;
+      font-size: 22px;
+      padding: 8px 10px;
+      border-radius: 10px;
+      border: 1px solid var(--border);
+      background: rgba(255,255,255,.05);
+      cursor: pointer;
+    }
+
+    @media (max-width: 768px) {
+      /* Show hamburger */
+      .nav-hamburger {
+        display: block;
+      }
+
+      /* Hide nav by default */
+      .nav-links {
+        display: none;
+        position: absolute;
+        top: 64px;
+        right: 14px;
+        flex-direction: column;
+        gap: 6px;
+        padding: 12px;
+        background: rgba(16,20,32,.96);
+        border: 1px solid var(--border);
+        border-radius: 14px;
+        box-shadow: var(--shadow);
+        z-index: 100;
+        min-width: 220px;
+      }
+
+      /* Show when toggled */
+      #nav-toggle:checked + .nav-hamburger + .nav-links {
+        display: flex;
+      }
+
+      /* Make links full-width */
+      .nav-links .navlink,
+      .nav-links .nav-pill {
+        width: 100%;
+      }
+    }
+  </style>
+
+
+
   {% block head %}{% endblock %}
 </head>
 
@@ -469,7 +522,10 @@
         </span>
       </a>
 
-      <nav>
+      <input type="checkbox" id="nav-toggle" />
+      <label for="nav-toggle" class="nav-hamburger">☰</label>
+
+      <nav class="nav-links">
         <a class="navlink" href="{{ url_for('main.app_home') }}">Home</a>
         <a class="navlink" href="{{ url_for('main.curriculum_index') }}">Curriculums</a>
         <a class="navlink" href="{{ url_for('main.lessons_index') }}">Lessons</a>

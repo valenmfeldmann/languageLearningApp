@@ -197,6 +197,13 @@ def create_app():
             "auth.login",
             "auth.google_callback",
             "auth.logout",
+
+            # billing portal
+            "billing.portal",  # GET /billing/portal
+            "billing.checkout",  # GET/POST /billing/checkout (whatever you named it)
+            "billing.checkout_success",  # if you have it
+            "billing.checkout_cancel",  # if you have it
+
         }
 
         # If you want "/app" home or "/" home accessible, add the real endpoint name(s) here.

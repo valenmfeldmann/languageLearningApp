@@ -21,7 +21,7 @@ echo "⬆️ Pushing to GitHub..."
 git push origin "$BRANCH"
 
 echo "🚀 Deploying to server..."
-ssh "${SERVER_USER}@${SERVER_HOST}" <<EOF
+ssh "${SERVER_USER}@${SERVER_HOST}" "RESET_DB=${RESET_DB}" <<'EOF'
   set -euo pipefail
   cd ~/languageLearningApp
 
@@ -39,17 +39,26 @@ ssh "${SERVER_USER}@${SERVER_HOST}" <<EOF
 
     ./scripts/hard_reset_schema_from_models.sh
   else
-    echo "🚀 Starting db + web..."
-    docker compose up -d db web
+    echo "🗄️ Ensuring db is up..."
+    docker compose up -d db
 
-    echo "⏳ Waiting briefly for db..."
-    sleep 2
+    echo "⏳ Waiting for db health..."
+    # wait up to ~60s for healthy
+    for i in {1..30}; do
+      status="$(docker inspect -f '{{.State.Health.Status}}' languagelearningapp-db-1 2>/dev/null || true)"
+      if [ "$status" != "healthy" ]; then
+        echo "❌ DB never became healthy"
+        docker compose logs --tail=200 db
+        exit 1
+      fi
+    done
 
     echo "📦 Running migrations..."
-    docker compose exec -T web flask --app app:create_app db upgrade
+    docker compose run --rm web flask --app app:create_app db upgrade
 
-    echo "🔄 Bringing up full stack..."
-    docker compose up -d
+    echo "🚀 Recreating app services (not db)..."
+    docker compose up -d --no-deps --force-recreate web worker
+    docker compose up -d nginx
   fi
 
   echo "✅ Deploy complete"

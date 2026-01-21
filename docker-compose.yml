@@ -5,12 +5,17 @@ services:
       POSTGRES_USER: postgres
       POSTGRES_PASSWORD: postgres
       POSTGRES_DB: appdb
-    command: ["postgres", "-c", "listen_addresses=*"]
+    command:
+      [
+        "postgres",
+        "-c", "listen_addresses=*",
+        "-c", "hba_file=/etc/postgresql/pg_hba.conf"
+      ]
     volumes:
       - pgdata:/var/lib/postgresql/data
-      - ./deploy/pg_hba.conf:/var/lib/postgresql/data/pg_hba.conf:ro
+      - ./deploy/pg_hba.conf:/etc/postgresql/pg_hba.conf:ro
     healthcheck:
-      test: ["CMD-SHELL", "pg_isready -U postgres -d appdb"]
+      test: [ "CMD-SHELL", "pg_isready -U postgres -d appdb" ]
       interval: 3s
       timeout: 3s
       retries: 20

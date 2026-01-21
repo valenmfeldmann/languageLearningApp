@@ -59,10 +59,13 @@ ssh "${SERVER_USER}@${SERVER_HOST}" "RESET_DB=${RESET_DB} SERVER_DIR=${SERVER_DI
       exit 1
     fi
 
+    echo "🛑 Stopping web to avoid migration locks..."
+    docker compose stop web || true
+
     echo "📦 Running migrations..."
     docker compose run --rm web flask --app app:create_app db upgrade
 
-    echo "🚀 Recreating app services (not db)..."
+    echo "🚀 Starting app services..."
     docker compose up -d --no-deps --force-recreate web worker
     docker compose up -d nginx
   fi

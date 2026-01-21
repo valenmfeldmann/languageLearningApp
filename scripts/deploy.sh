@@ -31,44 +31,51 @@ ssh "${SERVER_USER}@${SERVER_HOST}" "RESET_DB=${RESET_DB} SERVER_DIR=${SERVER_DI
   echo "🐳 Building images..."
   docker compose build
 
+  # Ensure DB is up (or reset it)
   if [ "$RESET_DB" = "1" ]; then
-    echo "💣 RESET_DB=1 — performing hard DB reset from models"
-
+    echo "💣 RESET_DB=1 — wiping DB volume (SERVER) and rebuilding from committed migrations"
     docker compose down -v
-    docker compose up -d
-
-    ./scripts/hard_reset_schema_from_models.sh
-  else
-    echo "🗄️ Ensuring db is up..."
-    docker compose up -d db
-
-    echo "⏳ Waiting for db health..."
-    status=""
-    for i in {1..30}; do
-      status="$(docker inspect -f '{{.State.Health.Status}}' languagelearningapp-db-1 2>/dev/null || true)"
-      if [ "$status" = "healthy" ]; then
-        echo "✅ DB is healthy"
-        break
-      fi
-      sleep 2
-    done
-
-    if [ "$status" != "healthy" ]; then
-      echo "❌ DB never became healthy (status='$status')"
-      docker compose logs --tail=200 db
-      exit 1
-    fi
-
-    echo "🛑 Stopping web to avoid migration locks..."
-    docker compose stop web || true
-
-    echo "📦 Running migrations..."
-    docker compose run --rm web flask --app app:create_app db upgrade
-
-    echo "🚀 Starting app services..."
-    docker compose up -d --no-deps --force-recreate web worker
-    docker compose up -d nginx
   fi
+
+  echo "🗄️ Starting db..."
+  docker compose up -d db
+
+  echo "⏳ Waiting for db health..."
+  DB_CID="$(docker compose ps -q db)"
+  if [ -z "$DB_CID" ]; then
+    echo "❌ Could not find db container id"
+    docker compose ps
+    exit 1
+  fi
+
+  status=""
+  for i in {1..30}; do
+    status="$(docker inspect -f '{{.State.Health.Status}}' "$DB_CID" 2>/dev/null || true)"
+    if [ "$status" = "healthy" ]; then
+      echo "✅ DB is healthy"
+      break
+    fi
+    sleep 2
+  done
+
+  if [ "$status" != "healthy" ]; then
+    echo "❌ DB never became healthy (status='$status')"
+    docker compose logs --tail=200 db
+    exit 1
+  fi
+
+  echo "🛑 Stopping web/worker to avoid weirdness during upgrade..."
+  docker compose stop web worker || true
+
+  echo "📦 Running migrations..."
+  ./scripts/migrate.sh
+
+  echo "🌱 Seeding core invariants..."
+  ./scripts/seed_core.sh
+
+  echo "🚀 Starting app services..."
+  docker compose up -d --no-deps --force-recreate web worker
+  docker compose up -d nginx
 
   echo "✅ Deploy complete"
 EOF

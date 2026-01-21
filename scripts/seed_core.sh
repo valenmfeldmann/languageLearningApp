@@ -9,16 +9,24 @@ if [[ ! -f "$SQL_FILE" ]]; then
 fi
 
 echo "==> Seeding using $SQL_FILE"
+echo "==> Seeding via docker compose exec db psql ..."
 
-# Mode A: Use DATABASE_URL if provided (server-friendly)
-if [[ "${DATABASE_URL:-}" != "" ]]; then
-  echo "==> Using DATABASE_URL"
-  psql "$DATABASE_URL" -v ON_ERROR_STOP=1 < "$SQL_FILE"
-  echo "==> Done."
-  exit 0
-fi
+docker compose exec -T db bash -lc '
+  set -euo pipefail
 
-# Mode B: Docker compose db container (local-friendly)
-echo "==> DATABASE_URL not set. Using docker compose exec db..."
-cat "$SQL_FILE" | docker compose exec -T db psql -U postgres -d appdb -v ON_ERROR_STOP=1
+  U="${POSTGRES_USER:-postgres}"
+  D="${POSTGRES_DB:-appdb}"
+  PW="${POSTGRES_PASSWORD:-}"
+
+  echo "==> db container: user=$U db=$D"
+
+  # Feed password to psql non-interactively (if present)
+  if [[ -n "$PW" ]]; then
+    export PGPASSWORD="$PW"
+  fi
+
+  # Use TCP so we follow password rules consistently
+  psql -h 127.0.0.1 -v ON_ERROR_STOP=1 -U "$U" -d "$D"
+' < "$SQL_FILE"
+
 echo "==> Done."

@@ -1,7 +1,11 @@
 from flask_login import UserMixin
 import uuid
+
+from sqlalchemy import Index, text
+
 from .extensions import db
 from datetime import datetime, date
+
 
 
 def _uuid() -> str:
@@ -525,26 +529,34 @@ class CurriculumOwner(db.Model):
 
 
 
+
 class AccessAsset(db.Model):
     __tablename__ = "access_asset"
 
     id = db.Column(db.String, primary_key=True, default=_uuid)
 
-    # Examples:
-    #  - "AN" (Access Notes)
-    #  - "CURR_SHARE:<curriculum_id>"
-    code = db.Column(db.String, nullable=False, unique=True, index=True)
+    code = db.Column(db.String, nullable=False)  # <-- remove unique=True, index=True
 
-    # e.g. "access_note", "curriculum_share"
     asset_type = db.Column(db.String, nullable=False, index=True)
+    curriculum_id = db.Column(
+        db.String,
+        db.ForeignKey("curriculum.id", ondelete="CASCADE"),
+        nullable=True,
+        index=True,
+    )
 
-    # Only set for curriculum shares
-    curriculum_id = db.Column(db.String, db.ForeignKey("curriculum.id", ondelete="CASCADE"), nullable=True, index=True)
-
-    # integer fixed-point scale if you ever want it (shares can be scale=1)
     scale = db.Column(db.Integer, nullable=False, default=1)
-
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        Index("ux_access_asset_code", "code", unique=True),
+        Index(
+            "ux_access_asset_curriculum_share",
+            "curriculum_id",
+            unique=True,
+            postgresql_where=text("asset_type = 'curriculum_share'"),
+        ),
+    )
 
 
 

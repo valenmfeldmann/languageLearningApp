@@ -18,14 +18,14 @@ DO UPDATE SET
 -- LEDGER: ASSET + SYSTEM ACCOUNTS
 -- ----------------------------
 
--- 1) asset code should be globally unique
-CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_code
-ON access_asset (code);
+---- 1) asset code should be globally unique
+--CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_code
+--ON access_asset (code);
 
--- 2) (optional) one share-asset per curriculum
-CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_curriculum_share
-ON access_asset (curriculum_id)
-WHERE asset_type = 'curriculum_share';
+---- 2) (optional) one share-asset per curriculum
+--CREATE UNIQUE INDEX IF NOT EXISTS ux_access_asset_curriculum_share
+--ON access_asset (curriculum_id)
+--WHERE asset_type = 'curriculum_share';
 
 -- Create AN asset (updates fields if code already exists)
 INSERT INTO access_asset (id, code, asset_type, curriculum_id, scale, created_at)

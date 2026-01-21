@@ -8,6 +8,12 @@ BRANCH=main
 
 RESET_DB="${RESET_DB:-0}"
 
+echo "🔍 Checking for uncommitted migrations..."
+if ! git diff --quiet -- migrations/versions; then
+  echo "❌ You have uncommitted migration changes in migrations/versions/. Commit them first."
+  exit 1
+fi
+
 echo "🔍 Checking git status..."
 if ! git diff --quiet || ! git diff --cached --quiet; then
   echo "❌ You have uncommitted changes. Commit first."

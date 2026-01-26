@@ -129,15 +129,19 @@ def admin_grant_free_months(months: int):
 @login_required
 def checkout(plan_code: str):
 
-    existing = (Subscription.query
-                .filter_by(user_id=current_user.id)
-                .filter(Subscription.status.in_(("active", "trialing", "past_due", "unpaid", "incomplete")))
-                .first()
-                )
+    existing = Subscription.query.filter_by(user_id=current_user.id).first()
 
     if existing:
-        # Either redirect to billing portal, or just send them back
-        return redirect("/app")
+        status = (existing.status or "").lower()
+
+        # Already good → don’t create a second subscription
+        if status in ("active", "trialing"):
+            return redirect("/app")
+
+        # Soft-fail statuses → send them to Stripe portal to fix payment method
+        # (or allow a fresh checkout if you prefer)
+        if status in ("past_due", "unpaid", "incomplete", "incomplete_expired"):
+            return redirect(url_for("billing.portal"))
 
     plan = Plan.query.filter_by(code=plan_code, active=True).first()
     if not plan or not plan.stripe_price_id:
@@ -327,6 +331,18 @@ def stripe_webhook():
                 if customer_id:
                     cust = stripe.Customer.retrieve(customer_id)
                     _update_user_stripe_balance_from_customer(cust)
+
+                row = Subscription.query.filter_by(user_id=user_id).first()
+                if row:
+                    row.access_revoked_reason = None
+                    row.access_revoked_anchor = None
+                    row.access_revoked_at = None
+                    db.session.add(row)  # not strictly required, but harmless/clear
+
+                db.session.commit()       # ONLY if you don't already commit later
+
+
+
 
 
 

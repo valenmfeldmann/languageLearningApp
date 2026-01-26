@@ -150,6 +150,18 @@ class LessonSubject(db.Model):
     created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
+class LessonSchool(db.Model):
+    __tablename__ = "lesson_school"
+
+    # short stable id like "hope", "umich", "hs_ap", "mit_ocw"
+    code = db.Column(db.String, primary_key=True)
+    name = db.Column(db.String, nullable=False)
+    description = db.Column(db.Text, nullable=True)
+
+    active = db.Column(db.Boolean, nullable=False, default=True)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+
 class TriviaAnswer(db.Model):
     __tablename__ = "trivia_answer"
 
@@ -481,6 +493,12 @@ class Curriculum(db.Model):
         index=True,
     )
 
+    school_code = db.Column(
+        db.String,
+        db.ForeignKey("lesson_school.code", ondelete="SET NULL"),
+        nullable=True,
+        index=True,
+    )
 
 
 class CurriculumOwner(db.Model):

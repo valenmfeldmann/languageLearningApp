@@ -113,6 +113,8 @@ class Lesson(db.Model):
 
 
 
+
+
 class LessonCompletion(db.Model):
     __tablename__ = "lesson_completion"
 
@@ -501,6 +503,11 @@ class Curriculum(db.Model):
     )
 
     cover_image_url = db.Column(db.Text, nullable=True)
+
+    is_archived = db.Column(db.Boolean, nullable=False, default=False, index=True)
+    archived_at = db.Column(db.DateTime, nullable=True)
+
+
 
 
 class CurriculumOwner(db.Model):

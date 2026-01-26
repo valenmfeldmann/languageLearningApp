@@ -16,12 +16,21 @@
     </div>
 
     <label>Subject</label>
-    <select name="subject_code" class="dark-field">
+    <select name="subject_code" class="dark-field" required>
       <option value="">— Select subject —</option>
       {% for s in subjects %}
         <option value="{{ s.code }}">{{ s.name }}</option>
       {% endfor %}
     </select>
+
+    <label style="display:block; margin-top: 10px;">School</label>
+    <select name="school_code" class="dark-field" required>
+      <option value="">— Select school —</option>
+      {% for sc in schools %}
+        <option value="{{ sc.code }}">{{ sc.name }}</option>
+      {% endfor %}
+    </select>
+
 
 
     <div style="margin: 10px 0;">

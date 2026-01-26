@@ -27,6 +27,7 @@ from flask import abort, jsonify
 from sqlalchemy import and_
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
+from app.models import LessonSubject, LessonSchool  # new model
 
 
 DEFAULT_SHARES = 100
@@ -1177,6 +1178,25 @@ def lesson_asset_upload(lesson_id: str):
 #     _require_author()
 #     return render_template("author/curriculum_new.html")
 
+
+
+# @bp.get("/curriculum/new")
+# @login_required
+# def curriculum_new_form():
+#     _require_author()
+#
+#     subjects = (LessonSubject.query
+#         .filter(LessonSubject.active.is_(True))
+#         .order_by(LessonSubject.name.asc())
+#         .all())
+#
+#     return render_template(
+#         "author/curriculum_new.html",
+#         subjects=subjects,
+#     )
+
+
+
 @bp.get("/curriculum/new")
 @login_required
 def curriculum_new_form():
@@ -1187,10 +1207,12 @@ def curriculum_new_form():
         .order_by(LessonSubject.name.asc())
         .all())
 
-    return render_template(
-        "author/curriculum_new.html",
-        subjects=subjects,
-    )
+    schools = (LessonSchool.query
+        .filter(LessonSchool.active.is_(True))
+        .order_by(LessonSchool.name.asc())
+        .all())
+
+    return render_template("author/curriculum_new.html", subjects=subjects, schools=schools)
 
 
 
@@ -1198,30 +1220,46 @@ def curriculum_new_form():
 @login_required
 def curriculum_new_post():
     _require_author()
-    from app.models import Curriculum
+    from app.models import Curriculum, LessonSubject, LessonSchool
 
     code = (request.form.get("code") or "").strip()
     title = (request.form.get("title") or "").strip()
     desc = (request.form.get("description") or "").strip() or None
     subject_code = (request.form.get("subject_code") or "").strip() or None
 
-    if subject_code:
-        subj = (LessonSubject.query
-                .filter_by(code=subject_code, active=True)
-                .one_or_none())
-        if not subj:
-            flash("Invalid subject.", "error")
-            return redirect(url_for("author.curriculum_new_form"))
+    subject_code = (request.form.get("subject_code") or "").strip()
+    school_code = (request.form.get("school_code") or "").strip()
+
+    if not subject_code or not school_code:
+        flash("Please select both a subject and a school.", "error")
+        return redirect(url_for("author.curriculum_new_form"))
+
+    subj = (LessonSubject.query
+            .filter_by(code=subject_code, active=True)
+            .one_or_none())
+    if not subj:
+        flash("Invalid subject.", "error")
+        return redirect(url_for("author.curriculum_new_form"))
+
+    sch = (LessonSchool.query
+           .filter_by(code=school_code, active=True)
+           .one_or_none())
+    if not sch:
+        flash("Invalid school.", "error")
+        return redirect(url_for("author.curriculum_new_form"))
 
     if not code or not title:
         flash("Missing code/title", "error")
         return redirect(url_for("author.curriculum_new_form"))
 
-    cur = Curriculum(code=code,
-                     title=title,
-                     description=desc,
-                     subject_code=subject_code,
-                     created_by_user_id=current_user.id)
+    cur = Curriculum(
+        code=code,
+        title=title,
+        description=desc,
+        subject_code=subject_code,
+        school_code=school_code,
+        created_by_user_id=current_user.id,
+    )
     db.session.add(cur)
     db.session.flush()  # get cur.id
 

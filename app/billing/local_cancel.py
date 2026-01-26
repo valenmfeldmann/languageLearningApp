@@ -40,7 +40,6 @@ def force_cancel_subscription_like_user_clicked(user_id: str, *, anchor: str) ->
             stripe_subscription_id=None,
             status="canceled",
             trial_end=None,
-            current_period_end=None,
             cancel_at_period_end=False,
             cancel_at=datetime.utcnow(),
         )

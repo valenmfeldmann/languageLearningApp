@@ -341,12 +341,6 @@ def stripe_webhook():
                     row.access_revoked_at = None
                     db.session.add(row)  # not strictly required, but harmless/clear
 
-                db.session.commit()       # ONLY if you don't already commit later
-
-
-
-
-
 
     elif etype == "customer.updated":
         _update_user_stripe_balance_from_customer(data)

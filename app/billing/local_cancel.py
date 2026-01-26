@@ -22,6 +22,7 @@ def _reason_from_anchor(anchor: str) -> str:
     return "unknown"
 
 
+
 def force_cancel_subscription_like_user_clicked(user_id: str, *, anchor: str) -> None:
     """
     Make the app behave as if the user canceled their subscription.
@@ -30,12 +31,6 @@ def force_cancel_subscription_like_user_clicked(user_id: str, *, anchor: str) ->
     - Apply unsubscribe clawback if eligible (idempotent inside credits.py)
     """
     sub = Subscription.query.filter_by(user_id=user_id).one_or_none()
-
-    # NEW: record why access was revoked
-    sub.access_revoked_reason = _reason_from_anchor(anchor)
-    sub.access_revoked_anchor = anchor
-    sub.access_revoked_at = datetime.utcnow()
-
 
     if not sub:
         # mirror your auth/routes.py behavior: create a local row if missing
@@ -55,6 +50,11 @@ def force_cancel_subscription_like_user_clicked(user_id: str, *, anchor: str) ->
         sub.cancel_at_period_end = False
         sub.cancel_at = datetime.utcnow()
         sub.trial_end = None
+
+    # record why access was revoked (SAFE: sub exists now)
+    sub.access_revoked_reason = _reason_from_anchor(anchor)
+    sub.access_revoked_anchor = anchor
+    sub.access_revoked_at = datetime.utcnow()
 
     db.session.commit()
 

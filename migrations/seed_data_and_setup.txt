@@ -84,6 +84,30 @@ WHERE a.account_type = 'user_wallet';
 
 
 ------------------------------------------------------------
+-- NEW - add Hope as a school to our db
+
+INSERT INTO lesson_school (code, name, description, active, created_at)
+VALUES ('hope', 'Hope College', NULL, TRUE, NOW())
+ON CONFLICT (code) DO UPDATE
+SET name = EXCLUDED.name,
+    description = EXCLUDED.description,
+    active = EXCLUDED.active;
+
+------------------------------------------------------------
+-- NEW - add religion as a subject (for curriculums) to our db
+
+
+INSERT INTO lesson_subject (code, name, description, active, created_at)
+VALUES (
+  'religion',
+  'Religion',
+  'Religious studies, theology, and comparative religion',
+  TRUE,
+  NOW()
+);
+
+
+------------------------------------------------------------
 -- Just to check
 
 SELECT * FROM access_asset WHERE code='AN';

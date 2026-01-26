@@ -500,6 +500,8 @@ class Curriculum(db.Model):
         index=True,
     )
 
+    cover_image_url = db.Column(db.Text, nullable=True)
+
 
 class CurriculumOwner(db.Model):
     __tablename__ = "curriculum_owner"

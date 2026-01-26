@@ -28,6 +28,10 @@ from sqlalchemy import and_
 import bleach
 from bleach.css_sanitizer import CSSSanitizer
 from app.models import LessonSubject, LessonSchool  # new model
+import os
+import time
+from werkzeug.utils import secure_filename
+from flask import current_app, url_for
 
 
 DEFAULT_SHARES = 100
@@ -1329,6 +1333,29 @@ def curriculum_edit(curriculum_id: str):
     return render_template("author/curriculum_edit.html", curriculum=cur, items=items, lessons=lessons)
 
 
+
+
+ALLOWED_EXTS = {"png", "jpg", "jpeg", "webp", "gif"}
+
+def _allowed_image(filename: str) -> bool:
+    ext = (filename.rsplit(".", 1)[-1] or "").lower()
+    return ext in ALLOWED_EXTS
+
+def _save_curriculum_cover(curriculum_id: str, file_storage) -> str:
+    # /app/app/static/user_uploads/curriculum_covers/<curriculum_id>/cover.<ext>
+    ext = (file_storage.filename.rsplit(".", 1)[-1] or "").lower()
+    folder = os.path.join(current_app.root_path, "static", "user_uploads", "curriculum_covers", curriculum_id)
+    os.makedirs(folder, exist_ok=True)
+
+    filename = secure_filename(f"cover.{ext}")
+    abs_path = os.path.join(folder, filename)
+    file_storage.save(abs_path)
+
+    # Cache-bust so users see the new image immediately
+    rel = f"user_uploads/curriculum_covers/{curriculum_id}/{filename}"
+    return url_for("static", filename=rel, v=str(int(time.time())))
+
+
 @bp.post("/curriculum/<curriculum_id>/edit")
 @login_required
 def curriculum_edit_post(curriculum_id: str):
@@ -1385,9 +1412,28 @@ def curriculum_edit_post(curriculum_id: str):
                 ))
                 pos += 1
 
+    cover = request.files.get("cover_image")
+    if cover and cover.filename:
+        if not _allowed_image(cover.filename):
+            flash("Cover image must be png/jpg/jpeg/webp/gif.", "error")
+            return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+        cur.cover_image_url = _save_curriculum_cover(cur.id, cover)
+
     db.session.commit()
     flash("Curriculum saved.", "success")
     return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+@bp.post("/curriculum/<curriculum_id>/cover/remove")
+@login_required
+def curriculum_cover_remove(curriculum_id):
+    _require_author()
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    cur.cover_image_url = None
+    db.session.commit()
+    flash("Cover image removed.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
 
 
 

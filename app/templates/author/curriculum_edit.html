@@ -13,7 +13,9 @@
     Add phases and lessons. “Repeat” expands a lesson into multiple slots.
   </p>
 
-  <form method="POST" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+  <form method="POST"
+        enctype="multipart/form-data"
+        action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
     <div style="margin: 10px 0;">
       <label for="lesson-filter" style="display:block; opacity:0.8;">Filter lesson dropdowns</label>
       <input id="lesson-filter" type="text" placeholder="Type to filter lessons…" style="width: 420px; max-width: 100%;">
@@ -93,6 +95,59 @@
       <a href="{{ url_for('author.curriculum_new_form') }}" style="margin-left: 10px;">New curriculum</a>
       <a href="{{ url_for('author.import_form') }}" style="margin-left: 10px;">Import lesson</a>
     </div>
+
+
+  <div style="display:flex; gap:16px; align-items:flex-start; margin:14px 0; max-width: 1100px;">
+    <div id="coverDrop"
+         style="width:260px; height:160px; border:1px dashed rgba(255,255,255,0.35);
+                border-radius:12px; overflow:hidden; cursor:pointer; position:relative;
+                display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.04);">
+      {% set has_cover = (curriculum.cover_image_url is not none and curriculum.cover_image_url|length > 0) %}
+
+      <img id="coverPreview"
+           src="{{ curriculum.cover_image_url if has_cover else '' }}"
+           alt="Cover"
+           style="width:100%; height:100%; object-fit:cover; {{ 'display:block;' if has_cover else 'display:none;' }}">
+
+      {% if has_cover %}
+        <div style="position:absolute; inset:0; background:rgba(0,0,0,0.25); opacity:0; transition:0.15s;"></div>
+        <div style="position:absolute; bottom:8px; left:10px; right:10px; font-size:13px; opacity:0; transition:0.15s;">
+          Click or drop to replace
+        </div>
+      {% else %}
+        <div style="text-align:center; padding:12px; opacity:0.85;">
+          <div style="font-weight:600;">Add cover image</div>
+          <div style="font-size:13px; opacity:0.8; margin-top:6px;">Click or drag & drop</div>
+          <div style="font-size:12px; opacity:0.6; margin-top:6px;">png/jpg/webp/gif</div>
+        </div>
+      {% endif %}
+    </div>
+
+    <div style="flex:1;">
+      <div style="font-weight:600; margin-bottom:6px;">Curriculum cover</div>
+      <div style="opacity:0.75; margin-bottom:10px;">
+        This shows on the curriculum page and in listings.
+      </div>
+
+      <input id="coverInput" type="file" name="cover_image" accept="image/*" style="display:none;">
+
+      <div style="display:flex; gap:10px; align-items:center;">
+        <button type="button" id="chooseCoverBtn">Choose image</button>
+
+        {% if curriculum.cover_image_url %}
+          <button type="submit"
+                  formaction="{{ url_for('author.curriculum_cover_remove', curriculum_id=curriculum.id) }}"
+                  formmethod="POST">
+            Remove
+          </button>
+        {% endif %}
+
+        <div id="coverHint" style="font-size:13px; opacity:0.7;"></div>
+      </div>
+    </div>
+  </div>
+
+
   </form>
 
 {% endblock %}
@@ -273,4 +328,53 @@
   });
 
 </script>
+
+<script>
+  (function () {
+    const drop = document.getElementById("coverDrop");
+    const input = document.getElementById("coverInput");
+    const preview = document.getElementById("coverPreview");
+    const chooseBtn = document.getElementById("chooseCoverBtn");
+    const hint = document.getElementById("coverHint");
+
+    if (!drop || !input || !preview || !chooseBtn) return;
+
+    function pick() { input.click(); }
+
+    function setPreview(file) {
+      if (!file) return;
+      if (!file.type.startsWith("image/")) {
+        hint.textContent = "Please choose an image file.";
+        return;
+      }
+      hint.textContent = "Ready — click Save to upload.";
+      preview.src = URL.createObjectURL(file);
+      preview.style.display = "block";
+    }
+
+    chooseBtn.addEventListener("click", pick);
+    drop.addEventListener("click", pick);
+
+    input.addEventListener("change", () => {
+      setPreview(input.files && input.files[0]);
+    });
+
+    // Drag & drop
+    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.style.outline = "2px solid rgba(255,255,255,0.35)"; });
+    drop.addEventListener("dragleave", () => { drop.style.outline = "none"; });
+    drop.addEventListener("drop", (e) => {
+      e.preventDefault();
+      drop.style.outline = "none";
+      const file = e.dataTransfer.files && e.dataTransfer.files[0];
+      if (!file) return;
+      // put it into the input so it submits normally
+      const dt = new DataTransfer();
+      dt.items.add(file);
+      input.files = dt.files;
+      setPreview(file);
+    });
+  })();
+</script>
+
+
 {% endblock %}

@@ -217,6 +217,11 @@ def _upsert_subscription_from_stripe(sub, user_id: str, plan_code: str | None):
     row.trial_end = _ts_to_dt(sub.get("trial_end"))
     row.cancel_at = _ts_to_dt(sub.get("cancel_at"))
 
+    # after row.status is set
+    if (row.status or "").lower() in ("active", "trialing"):
+        row.access_revoked_reason = None
+        row.access_revoked_anchor = None
+        row.access_revoked_at = None
 
 
 def _update_user_stripe_balance_from_customer(customer_obj: dict):

@@ -254,6 +254,8 @@ def _infer_plan_id_from_subscription(sub: dict) -> int | None:
 
 @bp.post("/webhook")
 def stripe_webhook():
+    current_app.logger.warning("STRIPE_WEBHOOK_HIT")
+
     _init_stripe()
 
     payload = request.get_data(as_text=False)

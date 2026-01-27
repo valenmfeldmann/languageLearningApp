@@ -971,41 +971,43 @@ def curriculum_view(curriculum_code: str):
 
 
 
-@bp.post("/app/curriculum/<curriculum_code>/editors/add")
+@bp.post("/author/curriculum/<curriculum_code>/editor/add")
 @login_required
 def curriculum_editor_add(curriculum_code):
-    cur = Curriculum.query.filter_by(code=curriculum_code).one_or_none()
-    if not cur:
-        abort(404)
+    from app.models import Curriculum, CurriculumEditor, User
 
-    # only managers can invite
-    _require_curriculum_manage(cur.id)
+    cur = Curriculum.query.filter_by(code=curriculum_code).first_or_404()
 
-    email = (request.form.get("email") or "").strip().lower()
+    _require_curriculum_perm(cur.id, need_manage=True)
+
+    email = request.form.get("email", "").strip().lower()
     if not email:
-        flash("Email required.", "error")
-        return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+        abort(400)
 
-    user = User.query.filter(func.lower(User.email) == email).one_or_none()
+    user = User.query.filter(func.lower(User.email) == email).first()
     if not user:
-        flash("No user with that email.", "error")
-        return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+        flash("User not found", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
 
+    # prevent duplicates
     exists = CurriculumEditor.query.filter_by(
         curriculum_id=cur.id,
         user_id=user.id,
-    ).one_or_none()
+    ).first()
+    if exists:
+        flash("User already has access", "info")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
 
-    if not exists:
-        db.session.add(CurriculumEditor(
-            curriculum_id=cur.id,
-            user_id=user.id,
-            invited_by_user_id=current_user.id,
-        ))
-        db.session.commit()
+    db.session.add(CurriculumEditor(
+        curriculum_id=cur.id,          # ✅ ID, not code
+        user_id=user.id,
+        can_edit=True,
+        invited_by_user_id=current_user.id,
+    ))
+    db.session.commit()               # ✅ REQUIRED
 
-    flash(f"{email} can now edit this curriculum.", "success")
-    return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+    flash("Editor added", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
 
 
 

@@ -233,3 +233,13 @@ We are trying to get the clawback to work when people unsubscribe
 
 
 {"kind":"image","value":"assets/cmu.jpg"}
+
+
+
+
+-------------------------------------------------------------------------------------------------------------------------
+REPLACE
+          <small class="muted">(by a Hope student, for Hope students)</small>
+
+<!--          <small class="muted">curriculums • lessons • practice</small>-->
+-------------------------------------------------------------------------------------------------------------------------

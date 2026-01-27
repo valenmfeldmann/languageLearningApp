@@ -42,6 +42,10 @@ from flask_login import login_required, current_user
 from sqlalchemy import desc
 import math, random
 from datetime import datetime
+from flask import abort, redirect, request, url_for
+from flask_login import login_required, current_user
+from app.extensions import db
+from app.models import Curriculum, UserCurriculumStar
 
 
 
@@ -248,32 +252,61 @@ def home():
 
 
 
-from sqlalchemy import or_
+
+@bp.post("/app/curriculum/<curriculum_id>/star")
+@login_required
+def curriculum_star(curriculum_id: str):
+    cur = Curriculum.query.get_or_404(curriculum_id)
+
+    # Optional: prevent starring archived/unpublished if you want
+    # if cur.is_archived or not cur.is_published:
+    #     abort(404)
+
+    exists = UserCurriculumStar.query.filter_by(
+        user_id=current_user.id, curriculum_id=cur.id
+    ).one_or_none()
+
+    if not exists:
+        db.session.add(UserCurriculumStar(user_id=current_user.id, curriculum_id=cur.id))
+        db.session.commit()
+
+    return redirect(request.referrer or url_for("main.app_home"))
+
+
+@bp.post("/app/curriculum/<curriculum_id>/unstar")
+@login_required
+def curriculum_unstar(curriculum_id: str):
+    cur = Curriculum.query.get_or_404(curriculum_id)
+
+    UserCurriculumStar.query.filter_by(
+        user_id=current_user.id, curriculum_id=cur.id
+    ).delete(synchronize_session=False)
+    db.session.commit()
+
+    return redirect(request.referrer or url_for("main.app_home"))
+
+
+
+from sqlalchemy import or_, case
 
 @bp.get("/app")
 def app_home():
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
 
-    # optional: find an in-progress lesson
     attempt = (
         LessonAttempt.query
         .filter_by(user_id=current_user.id, completed_at=None)
-        .order_by(
-            desc(LessonAttempt.last_heartbeat_at),
-            desc(LessonAttempt.started_at),
-        )
+        .order_by(desc(LessonAttempt.last_heartbeat_at), desc(LessonAttempt.started_at))
         .first()
     )
     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
 
-    # ----------------------------
-    # Explore filters (GET params)
-    # ----------------------------
     q = (request.args.get("q") or "").strip()
     subject_code = (request.args.get("subject") or "").strip() or None
     school_code = (request.args.get("school") or "").strip() or None
-    sort = (request.args.get("sort") or "new").strip()  # new | market_cap | title
+    sort = (request.args.get("sort") or "new").strip()
+    starred_only = (request.args.get("starred") or "").strip().lower() in ("1", "true", "yes", "on")
 
     subjects = (
         LessonSubject.query
@@ -281,8 +314,11 @@ def app_home():
         .order_by(LessonSubject.name.asc())
         .all()
     )
+    subject_name_by_code = {
+        s.code: s.name
+        for s in subjects
+    }
 
-    # school dropdown: derive from existing curricula (cheap + no extra model assumptions)
     school_rows = (
         db.session.query(Curriculum.school_code)
         .filter(Curriculum.school_code.isnot(None))
@@ -292,9 +328,12 @@ def app_home():
     )
     schools = [r[0] for r in school_rows if r[0]]
 
-    # ----------------------------
-    # Explore query
-    # ----------------------------
+    school_name_by_code = {
+        sc: sc.replace("_", " ").title()
+        for sc in schools
+    }
+
+    # ---------- base query ----------
     base = (
         Curriculum.query
         .filter(Curriculum.is_archived.is_(False))
@@ -314,7 +353,7 @@ def app_home():
             Curriculum.code.ilike(like),
         ))
 
-    # --- Stats: lesson count per curriculum
+    # ---------- stats subquery ----------
     lesson_count_sq = (
         db.session.query(
             CurriculumItem.curriculum_id.label("cid"),
@@ -326,24 +365,27 @@ def app_home():
         .subquery()
     )
 
-    # --- Stats: "market cap" proxy = curriculum wallet AN balance (ticks)
     an_asset = get_an_asset()
-
-    # AccessBalance has (account_id, asset_id, balance)
-    # Curriculum has wallet_account_id
     ab = AccessBalance
+    s = UserCurriculumStar
+
+    # joins
     base = (
         base
         .outerjoin(lesson_count_sq, lesson_count_sq.c.cid == Curriculum.id)
-        .outerjoin(
-            ab,
-            (ab.account_id == Curriculum.wallet_account_id) & (ab.asset_id == an_asset.id),
-        )
-        .with_entities(
-            Curriculum,
-            func.coalesce(lesson_count_sq.c.lesson_count, 0).label("lesson_count"),
-            func.coalesce(ab.balance, 0).label("wallet_ticks"),
-        )
+        .outerjoin(ab, (ab.account_id == Curriculum.wallet_account_id) & (ab.asset_id == an_asset.id))
+        .outerjoin(s, (s.curriculum_id == Curriculum.id) & (s.user_id == current_user.id))
+    )
+
+    if starred_only:
+        base = base.filter(s.user_id.isnot(None))
+
+    # select once (keep is_starred!)
+    base = base.with_entities(
+        Curriculum,
+        func.coalesce(lesson_count_sq.c.lesson_count, 0).label("lesson_count"),
+        func.coalesce(ab.balance, 0).label("wallet_ticks"),
+        case((s.user_id.isnot(None), True), else_=False).label("is_starred"),
     )
 
     # sorting
@@ -351,34 +393,34 @@ def app_home():
         base = base.order_by(Curriculum.title.asc())
     elif sort == "market_cap":
         base = base.order_by(desc(func.coalesce(ab.balance, 0)), Curriculum.created_at.desc())
-    else:  # "new"
+    else:
         base = base.order_by(Curriculum.created_at.desc())
 
     rows = base.limit(60).all()
 
-    # shape for template
     cards = []
-    for cur, lesson_count, wallet_ticks in rows:
-        wallet_ticks = int(wallet_ticks or 0)
+    for cur, lesson_count, wallet_ticks, is_starred in rows:
         cards.append({
             "curriculum": cur,
             "lesson_count": int(lesson_count or 0),
-            "market_cap_an": wallet_ticks / AN_SCALE,
-            "wallet_ticks": wallet_ticks,
+            "market_cap_an": int(wallet_ticks or 0) / AN_SCALE,
+            "wallet_ticks": int(wallet_ticks or 0),
+            "is_starred": bool(is_starred),
         })
 
     return render_template(
         "app/home.html",
         continue_lesson=lesson,
-
-        # explore
         cards=cards,
         q=q,
         subject_code=subject_code,
         school_code=school_code,
         sort=sort,
+        starred_only=starred_only,
         subjects=subjects,
         schools=schools,
+        subject_name_by_code=subject_name_by_code,
+        school_name_by_code=school_name_by_code,
     )
 
 

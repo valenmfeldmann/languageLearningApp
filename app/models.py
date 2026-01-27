@@ -509,6 +509,27 @@ class Curriculum(db.Model):
 
 
 
+class UserCurriculumStar(db.Model):
+    __tablename__ = "user_curriculum_star"
+
+    user_id = db.Column(
+        db.String,
+        db.ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    curriculum_id = db.Column(
+        db.String,
+        db.ForeignKey("curriculum.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
+
+    __table_args__ = (
+        db.Index("ix_star_user", "user_id"),
+        db.Index("ix_star_curriculum", "curriculum_id"),
+    )
+
+
 
 class CurriculumOwner(db.Model):
     __tablename__ = "curriculum_owner"

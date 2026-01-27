@@ -90,6 +90,14 @@
 <form class="explore-top" method="GET" action="{{ url_for('main.app_home') }}"
       style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 14px 0 14px 0;">
 
+  <label style="display:flex; align-items:center; gap:8px; opacity:0.9; font-size:13px;">
+    <input type="checkbox" name="starred" value="1"
+           {% if request.args.get('starred') %}checked{% endif %}
+           onchange="this.form.submit()">
+    Starred
+  </label>
+
+
   <!-- Search (dominant) -->
   <div style="display:flex; gap:8px; align-items:center; flex: 1; min-width: 280px;">
     <input type="text" name="q" value="{{ q or '' }}" placeholder="Search curriculums…"
@@ -156,31 +164,67 @@
 <div class="explore-grid">
   {% for row in cards %}
     {% set cur = row.curriculum %}
-    <a class="card" href="{{ url_for('main.curriculum_view', curriculum_code=cur.code) }}">
-      <div class="thumb">
-        {% if cur.cover_image_url %}
-          <img src="{{ cur.cover_image_url }}" alt="{{ cur.title }}">
+
+    <div class="card" style="position:relative;">
+
+      <!-- Star overlay (NOT inside the link) -->
+      <div style="position:absolute; top:8px; right:8px; z-index:5;">
+        {% if row.is_starred %}
+          <form method="POST"
+                action="{{ url_for('main.curriculum_unstar', curriculum_id=cur.id) }}">
+            <button type="submit" title="Unstar"
+                    style="border:none; border-radius:999px;
+                           padding:6px 10px; cursor:pointer;">
+              ★
+            </button>
+          </form>
         {% else %}
-          <div style="height:100%; display:flex; align-items:center; justify-content:center; opacity:0.6;">
-            No cover
-          </div>
+          <form method="POST"
+                action="{{ url_for('main.curriculum_star', curriculum_id=cur.id) }}">
+            <button type="submit" title="Star"
+                    style="border:none; border-radius:999px;
+                           padding:6px 10px; cursor:pointer; opacity:0.85;">
+              ☆
+            </button>
+          </form>
         {% endif %}
       </div>
 
-      <div class="meta">
-        <div class="title">{{ cur.title }}</div>
+      <!-- Clickable card content -->
+      <a href="{{ url_for('main.curriculum_view', curriculum_code=cur.code) }}"
+         style="display:block; text-decoration:none; color:inherit;">
 
-        <div class="sub">
-          {% if cur.school_code %}<span>{{ cur.school_code }}</span>{% endif %}
-          {% if cur.subject_code %}<span>• {{ cur.subject_code }}</span>{% endif %}
+        <div class="thumb">
+          {% if cur.cover_image_url %}
+            <img src="{{ cur.cover_image_url }}" alt="{{ cur.title }}">
+          {% else %}
+            <div style="height:100%; display:flex; align-items:center;
+                        justify-content:center; opacity:0.6;">
+              No cover
+            </div>
+          {% endif %}
         </div>
 
-        <div class="stats">
-          <span>{{ row.lesson_count }} lessons</span>
-          <span>• {{ "%.2f"|format(row.market_cap_an) }} AN</span>
+        <div class="meta">
+          <div class="title">{{ cur.title }}</div>
+
+          <div class="sub">
+            {% if cur.school_code %}
+              <span>{{ school_name_by_code.get(cur.school_code, cur.school_code) }}</span>
+            {% endif %}
+            {% if cur.subject_code %}
+              <span>• {{ subject_name_by_code.get(cur.subject_code, cur.subject_code) }}</span>
+            {% endif %}
+          </div>
+
+          <div class="stats">
+            <span>{{ row.lesson_count }} lessons</span>
+            <span>• {{ "%.2f"|format(row.market_cap_an) }} AN</span>
+          </div>
         </div>
-      </div>
-    </a>
+      </a>
+
+    </div>
   {% endfor %}
 </div>
 
@@ -202,7 +246,7 @@
     if (!btn || !panel) return;
 
     // Auto-open filters if user already set them (nice UX)
-    const hasActiveFilters = {{ 'true' if subject_code or school_code else 'false' }};
+    const hasActiveFilters = {{ 'true' if subject_code or school_code or request.args.get('starred') else 'false' }};
     if (hasActiveFilters) panel.style.display = "flex";
 
     btn.addEventListener("click", () => {

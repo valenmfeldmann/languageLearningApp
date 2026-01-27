@@ -1,4 +1,4 @@
-You are generating a lesson.json for LanguageLearningApp.
+You are generating a lesson.json for GamifySchool.
 
 ABSOLUTE RULES
 - Output MUST be valid JSON (no markdown fences, no comments).

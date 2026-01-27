@@ -3,8 +3,8 @@ import uuid
 
 from sqlalchemy import Index, text
 
-from .extensions import db
-from datetime import datetime, date
+from datetime import datetime
+from app.extensions import db
 
 
 
@@ -527,6 +527,47 @@ class UserCurriculumStar(db.Model):
     __table_args__ = (
         db.Index("ix_star_user", "user_id"),
         db.Index("ix_star_curriculum", "curriculum_id"),
+    )
+
+
+
+
+class CurriculumEditor(db.Model):
+    __tablename__ = "curriculum_editor"
+
+    curriculum_id = db.Column(
+        db.String,
+        db.ForeignKey("curriculum.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    user_id = db.Column(
+        db.String,
+        db.ForeignKey("user.id", ondelete="CASCADE"),
+        primary_key=True,
+    )
+
+    can_edit = db.Column(
+        db.Boolean,
+        nullable=False,
+        default=True,
+    )
+
+    invited_by_user_id = db.Column(
+        db.String,
+        db.ForeignKey("user.id", ondelete="SET NULL"),
+        nullable=True,
+    )
+
+    created_at = db.Column(
+        db.DateTime,
+        nullable=False,
+        default=datetime.utcnow,
+    )
+
+    __table_args__ = (
+        db.Index("ix_curriculum_editor_user", "user_id"),
+        db.Index("ix_curriculum_editor_curriculum", "curriculum_id"),
     )
 
 

@@ -1,7 +1,7 @@
 from app.billing.access import has_access
 from app.billing.access import access_status
 from flask import Blueprint
-from app.models import _uuid, AccessAccount, LessonSubject
+from app.models import _uuid, AccessAccount, LessonSubject, CurriculumEditor
 from app.access_ledger.service import (
     get_or_create_system_account,
     post_access_txn,
@@ -902,7 +902,16 @@ def curriculum_view(curriculum_code: str):
     )
 
     my_row, _, _ = _curr_owner_ctx(cur.id)
-    can_edit = bool(my_row and my_row.shares > 0 and my_row.can_edit)
+
+    can_edit = bool(
+        (my_row and my_row.can_edit)
+        or CurriculumEditor.query.filter_by(
+            curriculum_id=cur.id,
+            user_id=current_user.id,
+            can_edit=True,
+        ).first()
+    )
+
     can_view_analytics = bool(my_row and my_row.shares > 0 and my_row.can_view_analytics)
     can_manage = bool(my_row and my_row.shares > 0 and my_row.can_manage_ownership)
 

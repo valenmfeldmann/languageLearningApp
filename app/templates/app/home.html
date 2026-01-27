@@ -87,34 +87,70 @@
   </p>
 {% endif %}
 
-<form class="explore-top" method="GET" action="{{ url_for('main.app_home') }}">
-  <input type="text" name="q" value="{{ q or '' }}" placeholder="Search curriculums…">
+<form class="explore-top" method="GET" action="{{ url_for('main.app_home') }}"
+      style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 14px 0 14px 0;">
 
-  <select name="subject">
-    <option value="">All subjects</option>
-    {% for s in subjects %}
-      <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
-        {{ s.name }}
-      </option>
-    {% endfor %}
-  </select>
+  <!-- Search (dominant) -->
+  <div style="display:flex; gap:8px; align-items:center; flex: 1; min-width: 280px;">
+    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search curriculums…"
+           style="flex:1; padding:10px 12px; border-radius:999px;
+                  border:1px solid rgba(255,255,255,0.18);
+                  background: rgba(255,255,255,0.04); color: inherit;">
+    <button type="submit"
+            style="padding:10px 14px; border-radius:999px; font-weight:700;">
+      Search
+    </button>
+  </div>
 
-  <select name="school">
-    <option value="">All schools</option>
-    {% for sc in schools %}
-      <option value="{{ sc }}" {% if school_code == sc %}selected{% endif %}>
-        {{ sc }}
-      </option>
-    {% endfor %}
-  </select>
-
-  <select name="sort">
+  <!-- Quick sort (always visible) -->
+  <select name="sort"
+          style="padding:9px 10px; border-radius:999px;
+                 border:1px solid rgba(255,255,255,0.18);
+                 background: rgba(255,255,255,0.04); color: inherit;">
     <option value="new" {% if sort == 'new' %}selected{% endif %}>Newest</option>
     <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market cap</option>
     <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
   </select>
 
-  <button type="submit">Search</button>
+  <!-- Filters toggle (collapses the bulky stuff) -->
+  <button type="button" id="toggleFilters"
+          style="padding:9px 12px; border-radius:999px; font-weight:700;">
+    Filters
+  </button>
+
+  <!-- Collapsible filters -->
+  <div id="filtersPanel"
+       style="display:none; width:100%; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px;">
+    <select name="subject"
+            style="padding:9px 10px; border-radius:999px;
+                   border:1px solid rgba(255,255,255,0.18);
+                   background: rgba(255,255,255,0.04); color: inherit;">
+      <option value="">All subjects</option>
+      {% for s in subjects %}
+        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
+          {{ s.name }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <select name="school"
+            style="padding:9px 10px; border-radius:999px;
+                   border:1px solid rgba(255,255,255,0.18);
+                   background: rgba(255,255,255,0.04); color: inherit;">
+      <option value="">All schools</option>
+      {% for sc in schools %}
+        <option value="{{ sc }}" {% if school_code == sc %}selected{% endif %}>
+          {{ sc }}
+        </option>
+      {% endfor %}
+    </select>
+
+    <!-- optional: quick clear -->
+    <a href="{{ url_for('main.app_home') }}"
+       style="opacity:0.8; font-size:13px; text-decoration:none;">
+      Clear
+    </a>
+  </div>
 </form>
 
 <div class="explore-grid">
@@ -157,5 +193,23 @@
     <li><a href="{{ url_for('author.lesson_new_form') }}">New Lesson</a></li>
   </ul>
 {% endif %}
+
+
+<script>
+  (function () {
+    const btn = document.getElementById("toggleFilters");
+    const panel = document.getElementById("filtersPanel");
+    if (!btn || !panel) return;
+
+    // Auto-open filters if user already set them (nice UX)
+    const hasActiveFilters = {{ 'true' if subject_code or school_code else 'false' }};
+    if (hasActiveFilters) panel.style.display = "flex";
+
+    btn.addEventListener("click", () => {
+      panel.style.display = (panel.style.display === "none" || !panel.style.display) ? "flex" : "none";
+    });
+  })();
+</script>
+
 
 {% endblock %}

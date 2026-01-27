@@ -1361,8 +1361,25 @@ def _save_curriculum_cover(curriculum_id: str, file_storage) -> str:
 def curriculum_edit_post(curriculum_id: str):
     _require_author()
     from app.models import Curriculum, CurriculumItem
+    from flask import abort
 
     cur = Curriculum.query.get_or_404(curriculum_id)
+
+    # Match GET permissions (important)
+    try:
+        _require_curriculum_perm(cur.id, need_edit=True)
+    except PermissionError:
+        abort(403)
+
+    # Handle Publish / Unpublish
+    action = (request.form.get("publish_action") or "").strip().lower()
+    if action == "publish":
+        cur.is_published = True
+        if not cur.published_at:
+            cur.published_at = _dt.utcnow()
+    elif action == "unpublish":
+        cur.is_published = False
+        cur.published_at = None
 
     # Items come in as parallel arrays
     item_type = request.form.getlist("item_type")

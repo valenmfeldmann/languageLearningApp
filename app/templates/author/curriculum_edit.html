@@ -34,6 +34,8 @@
     </a>
   </div>
 
+
+
   <p style="opacity:0.75; margin-top: 8px;">
     Add phases and lessons. “Repeat” expands a lesson into multiple slots.
   </p>
@@ -41,6 +43,51 @@
   <form method="POST"
         enctype="multipart/form-data"
         action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+
+    <!-- PUT PUBLISH BLOCK RIGHT HERE -->
+    <div style="
+      max-width:1100px;
+      border:1px solid rgba(255,255,255,0.18);
+      border-radius:14px;
+      padding:14px 16px;
+      margin: 12px 0 16px 0;
+      background: {% if curriculum.is_published %}rgba(0, 200, 0, 0.10){% else %}rgba(255, 80, 80, 0.10){% endif %};
+      display:flex;
+      align-items:center;
+      justify-content:space-between;
+      gap:14px;
+    ">
+      <div>
+        <div style="font-weight:800; font-size:16px;">
+          {% if curriculum.is_published %}
+            ✅ Published — visible to everyone
+          {% else %}
+            🚫 Not published — nobody will see this in Explore
+          {% endif %}
+        </div>
+        <div style="opacity:0.8; font-size:13px; margin-top:4px;">
+          Publishing controls visibility. Archiving is separate.
+        </div>
+      </div>
+
+      {% if curriculum.is_published %}
+        <button type="submit" name="publish_action" value="unpublish"
+                style="padding:10px 14px; border-radius:12px; font-weight:800;
+                       border:1px solid rgba(255,255,255,0.25);
+                       background: rgba(255, 80, 80, 0.20); cursor:pointer;">
+          Unpublish
+        </button>
+      {% else %}
+        <button type="submit" name="publish_action" value="publish"
+                style="padding:10px 14px; border-radius:12px; font-weight:900;
+                       border:1px solid rgba(255,255,255,0.25);
+                       background: rgba(0, 200, 0, 0.22); cursor:pointer;">
+          Publish
+        </button>
+      {% endif %}
+    </div>
+
+
     <div style="margin: 10px 0;">
       <label for="lesson-filter" style="display:block; opacity:0.8;">Filter lesson dropdowns</label>
       <input id="lesson-filter" type="text" placeholder="Type to filter lessons…" style="width: 420px; max-width: 100%;">

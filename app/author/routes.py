@@ -1547,6 +1547,54 @@ def place_order(curriculum_id: str):
     return {"ok": True, "order_id": order.id, "lock_txn_id": txn_id}
 
 
+
+from datetime import datetime
+
+@bp.post("/curriculum/<curriculum_id>/archive")
+@login_required
+def curriculum_archive(curriculum_id: str):
+    _require_author()
+    cur = Curriculum.query.get_or_404(curriculum_id)
+
+    try:
+        _require_curriculum_perm(cur.id, need_manage=True)
+    except PermissionError:
+        abort(403)
+
+    if not cur.is_archived:
+        cur.is_archived = True
+        cur.archived_at = datetime.utcnow()
+        db.session.commit()
+        flash("Curriculum archived. It is now hidden from users.", "success")
+    else:
+        flash("Curriculum is already archived.", "info")
+
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+@bp.post("/curriculum/<curriculum_id>/unarchive")
+@login_required
+def curriculum_unarchive(curriculum_id: str):
+    _require_author()
+    cur = Curriculum.query.get_or_404(curriculum_id)
+
+    try:
+        _require_curriculum_perm(cur.id, need_manage=True)
+    except PermissionError:
+        abort(403)
+
+    if cur.is_archived:
+        cur.is_archived = False
+        cur.archived_at = None
+        db.session.commit()
+        flash("Curriculum restored.", "success")
+    else:
+        flash("Curriculum is not archived.", "info")
+
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+
 @bp.post("/orders/<int:order_id>/cancel")
 @login_required
 def cancel_order(order_id: int):

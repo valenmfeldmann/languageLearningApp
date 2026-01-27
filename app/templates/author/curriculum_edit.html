@@ -4,6 +4,31 @@
 {% block content %}
   <div style="display:flex; align-items: baseline; gap: 12px;">
     <h1 style="margin:0;">Edit curriculum: {{ curriculum.title }}</h1>
+
+    <div style="margin: 12px 0; display:flex; gap:12px; align-items:center;">
+      {% if curriculum.is_archived %}
+        <span style="padding:4px 10px; border-radius:999px; background:#333; font-size:13px;">
+          Archived
+        </span>
+
+        <form method="POST"
+              action="{{ url_for('author.curriculum_unarchive', curriculum_id=curriculum.id) }}">
+          <button type="submit">
+            Unarchive
+          </button>
+        </form>
+      {% else %}
+        <form method="POST"
+              action="{{ url_for('author.curriculum_archive', curriculum_id=curriculum.id) }}"
+              onsubmit="return confirm('Archive this curriculum? It will be hidden from users but not deleted.');">
+          <button type="submit"
+                  style="background:#7a1e1e; color:white; border:none; padding:6px 12px; border-radius:8px;">
+            Archive curriculum
+          </button>
+        </form>
+      {% endif %}
+    </div>
+
     <a href="{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}" style="font-size: 14px;">
       View
     </a>

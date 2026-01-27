@@ -246,7 +246,7 @@
     if (!btn || !panel) return;
 
     // Auto-open filters if user already set them (nice UX)
-    const hasActiveFilters = {{ 'true' if subject_code or school_code or request.args.get('starred') else 'false' }};
+    const hasActiveFilters = {{ 'true' if subject_code or school_code else 'false' }};
     if (hasActiveFilters) panel.style.display = "flex";
 
     btn.addEventListener("click", () => {

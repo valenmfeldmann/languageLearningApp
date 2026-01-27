@@ -1,3 +1,4 @@
+from app.author.routes import _require_curriculum_perm
 from app.billing.access import has_access
 from app.billing.access import access_status
 from flask import Blueprint

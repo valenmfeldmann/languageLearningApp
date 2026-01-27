@@ -223,6 +223,33 @@ def home():
 
 
 
+# @bp.get("/app")
+# def app_home():
+#     if not has_access(current_user):
+#         return redirect(url_for("billing.pricing"))
+#
+#     # optional: find an in-progress lesson
+#     attempt = (
+#         LessonAttempt.query
+#         .filter_by(user_id=current_user.id, completed_at=None)
+#         .order_by(
+#             desc(LessonAttempt.last_heartbeat_at),
+#             desc(LessonAttempt.started_at),
+#         )
+#         .first()
+#     )
+#
+#     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
+#
+#     return render_template(
+#         "app/home.html",
+#         continue_lesson=lesson,
+#     )
+
+
+
+from sqlalchemy import or_
+
 @bp.get("/app")
 def app_home():
     if not has_access(current_user):
@@ -238,13 +265,124 @@ def app_home():
         )
         .first()
     )
-
     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
+
+    # ----------------------------
+    # Explore filters (GET params)
+    # ----------------------------
+    q = (request.args.get("q") or "").strip()
+    subject_code = (request.args.get("subject") or "").strip() or None
+    school_code = (request.args.get("school") or "").strip() or None
+    sort = (request.args.get("sort") or "new").strip()  # new | market_cap | title
+
+    subjects = (
+        LessonSubject.query
+        .filter(LessonSubject.active.is_(True))
+        .order_by(LessonSubject.name.asc())
+        .all()
+    )
+
+    # school dropdown: derive from existing curricula (cheap + no extra model assumptions)
+    school_rows = (
+        db.session.query(Curriculum.school_code)
+        .filter(Curriculum.school_code.isnot(None))
+        .distinct()
+        .order_by(Curriculum.school_code.asc())
+        .all()
+    )
+    schools = [r[0] for r in school_rows if r[0]]
+
+    # ----------------------------
+    # Explore query
+    # ----------------------------
+    base = (
+        Curriculum.query
+        .filter(Curriculum.is_archived.is_(False))
+        .filter(Curriculum.is_published.is_(True))
+    )
+
+    if subject_code:
+        base = base.filter(Curriculum.subject_code == subject_code)
+    if school_code:
+        base = base.filter(Curriculum.school_code == school_code)
+
+    if q:
+        like = f"%{q}%"
+        base = base.filter(or_(
+            Curriculum.title.ilike(like),
+            Curriculum.description.ilike(like),
+            Curriculum.code.ilike(like),
+        ))
+
+    # --- Stats: lesson count per curriculum
+    lesson_count_sq = (
+        db.session.query(
+            CurriculumItem.curriculum_id.label("cid"),
+            func.count(CurriculumItem.id).label("lesson_count"),
+        )
+        .filter(CurriculumItem.item_type == "lesson")
+        .filter(CurriculumItem.lesson_id.isnot(None))
+        .group_by(CurriculumItem.curriculum_id)
+        .subquery()
+    )
+
+    # --- Stats: "market cap" proxy = curriculum wallet AN balance (ticks)
+    an_asset = get_an_asset()
+
+    # AccessBalance has (account_id, asset_id, balance)
+    # Curriculum has wallet_account_id
+    ab = AccessBalance
+    base = (
+        base
+        .outerjoin(lesson_count_sq, lesson_count_sq.c.cid == Curriculum.id)
+        .outerjoin(
+            ab,
+            (ab.account_id == Curriculum.wallet_account_id) & (ab.asset_id == an_asset.id),
+        )
+        .with_entities(
+            Curriculum,
+            func.coalesce(lesson_count_sq.c.lesson_count, 0).label("lesson_count"),
+            func.coalesce(ab.balance, 0).label("wallet_ticks"),
+        )
+    )
+
+    # sorting
+    if sort == "title":
+        base = base.order_by(Curriculum.title.asc())
+    elif sort == "market_cap":
+        base = base.order_by(desc(func.coalesce(ab.balance, 0)), Curriculum.created_at.desc())
+    else:  # "new"
+        base = base.order_by(Curriculum.created_at.desc())
+
+    rows = base.limit(60).all()
+
+    # shape for template
+    cards = []
+    for cur, lesson_count, wallet_ticks in rows:
+        wallet_ticks = int(wallet_ticks or 0)
+        cards.append({
+            "curriculum": cur,
+            "lesson_count": int(lesson_count or 0),
+            "market_cap_an": wallet_ticks / AN_SCALE,
+            "wallet_ticks": wallet_ticks,
+        })
 
     return render_template(
         "app/home.html",
         continue_lesson=lesson,
+
+        # explore
+        cards=cards,
+        q=q,
+        subject_code=subject_code,
+        school_code=school_code,
+        sort=sort,
+        subjects=subjects,
+        schools=schools,
     )
+
+
+
 
 @bp.get("/pricing")
 def pricing_shortcut():

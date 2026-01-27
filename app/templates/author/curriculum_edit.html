@@ -35,6 +35,45 @@
   </div>
 
 
+  {% if editors %}
+    <hr>
+    <h3>Editors</h3>
+
+    {% if can_manage %}
+      <form method="POST"
+            action="{{ url_for('author.curriculum_editor_add', curriculum_code=curriculum.code) }}"
+            style="display:flex; gap:8px; max-width:420px; margin-bottom:12px;">
+        <input type="email"
+               name="email"
+               placeholder="Invite editor by email"
+               required
+               style="flex:1;">
+        <button type="submit">Add</button>
+      </form>
+    {% endif %}
+
+    <ul style="list-style:none; padding:0; margin:0;">
+      {% for ed, u in editors %}
+        <li style="display:flex; align-items:center; gap:10px; margin-bottom:6px;">
+          <span>{{ u.email }}</span>
+          <span style="font-size:12px; opacity:0.7;">
+            {% if ed.can_edit %}(can edit){% else %}(view only){% endif %}
+          </span>
+
+          {% if can_manage %}
+            <form method="POST"
+                  action="{{ url_for('author.curriculum_editor_remove', curriculum_code=curriculum.code) }}"
+                  style="margin-left:auto;">
+              <input type="hidden" name="user_id" value="{{ u.id }}">
+              <button type="submit">Remove</button>
+            </form>
+          {% endif %}
+        </li>
+      {% endfor %}
+    </ul>
+  {% endif %}
+
+
 
   <p style="opacity:0.75; margin-top: 8px;">
     Add phases and lessons. “Repeat” expands a lesson into multiple slots.
@@ -86,6 +125,66 @@
         </button>
       {% endif %}
     </div>
+
+
+
+    <div style="max-width:1100px; border:1px solid rgba(255,255,255,0.18);
+                border-radius:14px; padding:14px 16px; margin: 12px 0 16px 0;">
+      <div style="font-weight:800; margin-bottom:10px;">Sharing</div>
+
+      <div style="opacity:0.8; font-size:13px; margin-bottom:10px;">
+        Add an editor by email. Pending requests show up here too.
+      </div>
+
+      <form method="POST" action="{{ url_for('author.curriculum_editor_invite', curriculum_id=curriculum.id) }}"
+            style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
+        <input name="email" type="email" placeholder="friend@example.com"
+               style="padding:10px 12px; border-radius:10px; min-width:280px;">
+        <button type="submit" style="padding:10px 14px; border-radius:10px; font-weight:800;">
+          Grant edit access
+        </button>
+      </form>
+
+      {% if editors and editors|length > 0 %}
+        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
+          {% for ed, u in editors %}
+            <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;
+                        padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.04);">
+              <div>
+                <div style="font-weight:700;">{{ u.email }}</div>
+                <div style="font-size:13px; opacity:0.8;">
+                  {% if ed.can_edit %}
+                    ✅ Can edit
+                  {% else %}
+                    ⏳ Requested access (pending)
+                  {% endif %}
+                </div>
+              </div>
+
+              <div style="display:flex; gap:8px; align-items:center;">
+                {% if not ed.can_edit %}
+                  <form method="POST" action="{{ url_for('author.curriculum_editor_approve', curriculum_id=curriculum.id) }}">
+                    <input type="hidden" name="user_id" value="{{ u.id }}">
+                    <button type="submit">Approve</button>
+                  </form>
+                {% endif %}
+
+                <form method="POST" action="{{ url_for('author.curriculum_editor_remove', curriculum_id=curriculum.id) }}">
+                  <input type="hidden" name="user_id" value="{{ u.id }}">
+                  <button type="submit" style="background:#7a1e1e; color:white; border:none; padding:8px 10px; border-radius:10px;">
+                    Remove
+                  </button>
+                </form>
+              </div>
+            </div>
+          {% endfor %}
+        </div>
+      {% endif %}
+    </div>
+
+
+
+
 
 
     <div style="margin: 10px 0;">

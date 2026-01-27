@@ -32,7 +32,7 @@ import os
 import time
 from werkzeug.utils import secure_filename
 from flask import current_app, url_for
-
+from app.models import CurriculumEditor, User
 
 DEFAULT_SHARES = 100
 
@@ -61,26 +61,42 @@ def _require_lesson_edit_perm(lesson: Lesson) -> None:
 
 
 def _require_curriculum_perm(curriculum_id: str, *, need_edit: bool = False, need_manage: bool = False):
-    from app.models import CurriculumOwner
+    from app.models import CurriculumOwner, CurriculumEditor
 
+    # Owner row (shareholders)
     row = (CurriculumOwner.query
            .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
            .one_or_none())
-    if not row or row.shares <= 0:
-        raise PermissionError("not_owner")
 
-    top = (CurriculumOwner.query
-           .filter_by(curriculum_id=curriculum_id)
-           .order_by(CurriculumOwner.shares.desc(),
-                     CurriculumOwner.created_at.asc(),
-                     CurriculumOwner.id.asc())
-           .first())
-    is_owner = bool(top and top.user_id == current_user.id)
+    # Editor row (non-owners)
+    ed = (CurriculumEditor.query
+          .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
+          .one_or_none())
 
-    if need_manage and not is_owner:
-        raise PermissionError("not_admin")
-    if need_edit and not row.can_edit:
-        raise PermissionError("not_editor")
+    # "has any relationship"
+    if (not row or row.shares <= 0) and not ed:
+        raise PermissionError("not_owner_or_editor")
+
+    # Manage stays “top owner only” (your existing rule)
+    if need_manage:
+        if not row or row.shares <= 0:
+            raise PermissionError("not_admin")
+        top = (CurriculumOwner.query
+               .filter_by(curriculum_id=curriculum_id)
+               .order_by(CurriculumOwner.shares.desc(),
+                         CurriculumOwner.created_at.asc(),
+                         CurriculumOwner.id.asc())
+               .first())
+        is_owner = bool(top and top.user_id == current_user.id)
+        if not is_owner:
+            raise PermissionError("not_admin")
+
+    # Edit: owners with can_edit OR editors with can_edit
+    if need_edit:
+        owner_ok = bool(row and row.shares > 0 and row.can_edit)
+        editor_ok = bool(ed and ed.can_edit)
+        if not (owner_ok or editor_ok):
+            raise PermissionError("not_editor")
 
     return row
 
@@ -1311,6 +1327,9 @@ def curriculum_new_post():
 
 
 
+
+
+
 @bp.get("/curriculum/<curriculum_id>/edit")
 @login_required
 def curriculum_edit(curriculum_id: str):
@@ -1330,7 +1349,100 @@ def curriculum_edit(curriculum_id: str):
              .all())
     lessons = Lesson.query.order_by(Lesson.title.asc()).all()
 
-    return render_template("author/curriculum_edit.html", curriculum=cur, items=items, lessons=lessons)
+
+    editors = (
+        db.session.query(CurriculumEditor, User)
+        .join(User, User.id == CurriculumEditor.user_id)
+        .filter(CurriculumEditor.curriculum_id == cur.id)
+        .order_by(User.email.asc())
+        .all()
+    )
+
+    return render_template(
+        "author/curriculum_edit.html",
+        curriculum=cur,
+        items=items,
+        lessons=lessons,
+        editors=editors,
+    )
+
+
+@bp.post("/curriculum/<curriculum_id>/editors/invite")
+@login_required
+def curriculum_editor_invite(curriculum_id: str):
+    _require_author()
+    from app.models import Curriculum, CurriculumEditor, User
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    _require_curriculum_perm(cur.id, need_manage=True)
+
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Enter an email.", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+    u = User.query.filter(db.func.lower(User.email) == email).one_or_none()
+    if not u:
+        flash("No user found with that email.", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+    row = CurriculumEditor.query.filter_by(curriculum_id=cur.id, user_id=u.id).one_or_none()
+    if row:
+        row.can_edit = True
+        row.invited_by_user_id = current_user.id
+    else:
+        db.session.add(CurriculumEditor(
+            curriculum_id=cur.id,
+            user_id=u.id,
+            can_edit=True,
+            invited_by_user_id=current_user.id,
+        ))
+
+    db.session.commit()
+    flash(f"Granted edit access to {u.email}.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+@bp.post("/curriculum/<curriculum_id>/editors/approve")
+@login_required
+def curriculum_editor_approve(curriculum_id: str):
+    _require_author()
+    from app.models import Curriculum, CurriculumEditor
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    _require_curriculum_perm(cur.id, need_manage=True)
+
+    user_id = (request.form.get("user_id") or "").strip()
+    row = CurriculumEditor.query.filter_by(curriculum_id=cur.id, user_id=user_id).one_or_none()
+    if not row:
+        flash("Request not found.", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+    row.can_edit = True
+    row.invited_by_user_id = current_user.id
+    db.session.commit()
+    flash("Edit access approved.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+@bp.post("/curriculum/<curriculum_id>/editors/remove")
+@login_required
+def curriculum_editor_remove(curriculum_id: str):
+    _require_author()
+    from app.models import Curriculum, CurriculumEditor
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    _require_curriculum_perm(cur.id, need_manage=True)
+
+    user_id = (request.form.get("user_id") or "").strip()
+    row = CurriculumEditor.query.filter_by(curriculum_id=cur.id, user_id=user_id).one_or_none()
+    if row:
+        db.session.delete(row)
+        db.session.commit()
+
+    flash("Editor removed.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
 
 
 

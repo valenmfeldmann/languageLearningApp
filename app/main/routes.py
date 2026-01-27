@@ -1,7 +1,7 @@
 from app.billing.access import has_access
 from app.billing.access import access_status
 from flask import Blueprint
-from app.models import _uuid, AccessAccount, LessonSubject, CurriculumEditor
+from app.models import _uuid, AccessAccount, LessonSubject, CurriculumEditor, User
 from app.access_ledger.service import (
     get_or_create_system_account,
     post_access_txn,
@@ -760,81 +760,6 @@ def curriculum_index():
 
 
 
-# @bp.get("/app/curriculum/<curriculum_code>")
-# @login_required
-# def curriculum_view(curriculum_code: str):
-#     from collections import defaultdict
-#     from sqlalchemy import func
-#     from app.models import Curriculum, CurriculumItem, Lesson, LessonCompletion
-#
-#     cur = Curriculum.query.filter_by(code=curriculum_code).one_or_none()
-#     if not cur:
-#         abort(404)
-#
-#     items = (CurriculumItem.query
-#              .filter_by(curriculum_id=cur.id)
-#              .order_by(CurriculumItem.position.asc())
-#              .all())
-#
-#     # completion counts per lesson for this user
-#     rows = (db.session.query(LessonCompletion.lesson_id, func.count(LessonCompletion.id))
-#             .filter(LessonCompletion.user_id == current_user.id)
-#             .group_by(LessonCompletion.lesson_id)
-#             .all())
-#     completion_count = {lesson_id: int(cnt) for lesson_id, cnt in rows}
-#
-#     # Track how many times each lesson has appeared so far in this curriculum
-#     seen = defaultdict(int)
-#
-#     # Attach display info
-#     display = []
-#     lesson_ids = [it.lesson_id for it in items if it.item_type == "lesson" and it.lesson_id]
-#     lessons = {}
-#     if lesson_ids:
-#         for L in Lesson.query.filter(Lesson.id.in_(lesson_ids)).all():
-#             lessons[L.id] = L
-#
-#     for it in items:
-#         if it.item_type == "phase":
-#             display.append({"kind": "phase", "title": it.phase_title or "Phase"})
-#             continue
-#
-#         if it.item_type == "lesson" and it.lesson_id:
-#             seen[it.lesson_id] += 1
-#             n_completed = completion_count.get(it.lesson_id, 0)
-#             is_done = seen[it.lesson_id] <= n_completed
-#             display.append({
-#                 "kind": "lesson",
-#                 "lesson": lessons.get(it.lesson_id),
-#                 "is_done": is_done,
-#                 "occurrence": seen[it.lesson_id],
-#                 "note": it.note,
-#             })
-#             continue
-#
-#         # fallback
-#         display.append({"kind": "unknown"})
-#
-#     log_event(
-#         "curriculum_view",
-#         entity_type="curriculum",
-#         entity_id=cur.id,
-#         props={"curriculum_code": cur.code},
-#     )
-#
-#     my_row, _, _ = _curr_owner_ctx(cur.id)
-#
-#     can_edit = bool(my_row and my_row.shares > 0 and my_row.can_edit)
-#     can_view_analytics = bool(my_row and my_row.shares > 0 and my_row.can_view_analytics)
-#
-#     return render_template(
-#         "curriculum/view.html",
-#         curriculum=cur,
-#         items=display,
-#         can_edit=can_edit,
-#         can_view_analytics=can_view_analytics,
-#     )
-
 
 @bp.get("/app/curriculum/<curriculum_code>")
 @login_required
@@ -1043,6 +968,71 @@ def curriculum_view(curriculum_code: str):
         ownership_pct=ownership_pct,
 
     )
+
+
+
+@bp.post("/app/curriculum/<curriculum_code>/editors/add")
+@login_required
+def curriculum_editor_add(curriculum_code):
+    cur = Curriculum.query.filter_by(code=curriculum_code).one_or_none()
+    if not cur:
+        abort(404)
+
+    # only managers can invite
+    _require_curriculum_manage(cur.id)
+
+    email = (request.form.get("email") or "").strip().lower()
+    if not email:
+        flash("Email required.", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+
+    user = User.query.filter(func.lower(User.email) == email).one_or_none()
+    if not user:
+        flash("No user with that email.", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+
+    exists = CurriculumEditor.query.filter_by(
+        curriculum_id=cur.id,
+        user_id=user.id,
+    ).one_or_none()
+
+    if not exists:
+        db.session.add(CurriculumEditor(
+            curriculum_id=cur.id,
+            user_id=user.id,
+            invited_by_user_id=current_user.id,
+        ))
+        db.session.commit()
+
+    flash(f"{email} can now edit this curriculum.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+
+
+
+@bp.post("/app/curriculum/<curriculum_code>/editors/remove")
+@login_required
+def curriculum_editor_remove(curriculum_code):
+    cur = Curriculum.query.filter_by(code=curriculum_code).one_or_none()
+    if not cur:
+        abort(404)
+
+    _require_curriculum_manage(cur.id)
+
+    user_id = request.form.get("user_id")
+    if not user_id:
+        abort(400)
+
+    CurriculumEditor.query.filter_by(
+        curriculum_id=cur.id,
+        user_id=user_id,
+    ).delete()
+
+    db.session.commit()
+    flash("Editor removed.", "info")
+    return redirect(url_for("author.curriculum_edit", curriculum_code=cur.code))
+
+
+
 
 
 @bp.get("/app/lessons")

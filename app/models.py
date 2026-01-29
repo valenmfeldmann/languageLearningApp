@@ -1,11 +1,8 @@
 from flask_login import UserMixin
 import uuid
-
 from sqlalchemy import Index, text
-
-from datetime import datetime
-from app.extensions import db
-
+from datetime import datetime, timezone
+from app.extensions import db  # or wherever db = SQLAlchemy() lives
 
 
 def _uuid() -> str:
@@ -767,4 +764,46 @@ class CurriculumOrder(db.Model):
         db.Index("ix_order_book", "curriculum_id", "side", "status", "price_ticks", "created_at"),
     )
 
+
+
+
+
+class StripeWebhookEvent(db.Model):
+    __tablename__ = "stripe_webhook_event"
+
+    # Stripe's event id looks like: evt_...
+    id = db.Column(db.Integer, primary_key=True)
+    stripe_event_id = db.Column(db.String(255), unique=True, nullable=False, index=True)
+
+    # Useful metadata
+    event_type = db.Column(db.String(255), nullable=False, index=True)   # e.g. "checkout.session.completed"
+    api_version = db.Column(db.String(64), nullable=True)
+    livemode = db.Column(db.Boolean, nullable=False, default=False)
+
+    # Raw payload (store for replay/debug)
+    payload_json = db.Column(db.JSON, nullable=False)
+
+    # Processing bookkeeping
+    status = db.Column(db.String(32), nullable=False, default="received", index=True)
+    # suggested values: "received", "processed", "ignored", "error"
+
+    error = db.Column(db.Text, nullable=True)
+
+    received_at = db.Column(db.DateTime, nullable=False, default=lambda: datetime.now(timezone.utc), index=True)
+    processed_at = db.Column(db.DateTime, nullable=True, index=True)
+
+    def mark_processed(self):
+        self.status = "processed"
+        self.processed_at = datetime.now(timezone.utc)
+
+    def mark_ignored(self, reason: str | None = None):
+        self.status = "ignored"
+        self.processed_at = datetime.now(timezone.utc)
+        if reason:
+            self.error = reason
+
+    def mark_error(self, msg: str):
+        self.status = "error"
+        self.processed_at = datetime.now(timezone.utc)
+        self.error = msg
 

@@ -4,6 +4,36 @@
 {% block main_class %}container wide{% endblock %}
 
 <style>
+
+  /* Asset ref inputs */
+  .asset-input {
+    width: 100%;
+    min-width: 0;
+    box-sizing: border-box;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+    overflow: hidden;
+  }
+
+
+  /* Asset list: prevent overflow */
+  .asset-list {
+    padding-left: 16px;
+  }
+
+  .asset-list li {
+    max-width: 100%;
+    overflow: hidden;
+  }
+
+  .asset-ref {
+    display: block;
+    max-width: 100%;
+    white-space: nowrap;
+    overflow: hidden;
+    text-overflow: ellipsis;
+  }
+
   .lesson-layout {
     display: grid;
     grid-template-columns: 280px minmax(480px, 1.2fr) minmax(420px, 1fr);
@@ -69,15 +99,20 @@
 
 </style>
 
+
 <datalist id="audio-ref-list">
   {% for a in assets if (a.content_type or "").startswith("audio/") %}
     <option value="{{ a.ref }}">
+      {{ a.ref.split('/')[-1] }}
+    </option>
   {% endfor %}
 </datalist>
 
 <datalist id="video-ref-list">
   {% for a in assets if (a.content_type or "").startswith("video/") %}
     <option value="{{ a.ref }}">
+      {{ a.ref.split('/')[-1] }}
+    </option>
   {% endfor %}
 </datalist>
 
@@ -311,9 +346,11 @@
       </form>
 
       {% if assets|length > 0 %}
-        <ul>
+        <ul class="asset-list">
           {% for a in assets %}
-            <li><code>{{ a.ref }}</code></li>
+            <li title="{{ a.ref }}">
+              <code class="asset-ref">{{ a.ref }}</code>
+            </li>
           {% endfor %}
         </ul>
       {% endif %}
@@ -454,7 +491,6 @@
                 name="ref"
                 id="video_asset_ref"
                 value="{{ payload.get('ref','') }}"
-                style="width:100%;"
                 list="video-ref-list"
                 placeholder="Select uploaded video ref…"
               />
@@ -487,7 +523,6 @@
                 type="text"
                 name="ref"
                 id="audio_asset_ref"
-                style="width:100%;"
                 value="{{ payload.get('ref','') }}"
                 list="audio-ref-list"
                 placeholder="Select uploaded audio ref…"

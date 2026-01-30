@@ -1,0 +1,21 @@
+{# app/templates/lessons/blocks/audio_asset.html #}
+
+{% set _block = (block if block is defined else b) %}
+{% set p = _block.payload_json or {} %}
+
+{% if p.get("ref") %}
+  <audio
+    src="{{ url_for('lessons.asset', lesson_id=lesson.id, ref=p.get('ref')) }}"
+    {% if p.get("controls", True) %}controls{% endif %}
+    {% if p.get("autoplay") %}autoplay{% endif %}
+    {% if p.get("loop") %}loop{% endif %}
+    preload="metadata"
+    style="width:100%;"
+  ></audio>
+
+  {% if p.get("caption") %}
+    <div><em>{{ p.get("caption") }}</em></div>
+  {% endif %}
+{% else %}
+  <em>(no audio selected)</em>
+{% endif %}

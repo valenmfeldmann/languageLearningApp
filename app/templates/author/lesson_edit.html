@@ -69,6 +69,19 @@
 
 </style>
 
+<datalist id="audio-ref-list">
+  {% for a in assets if (a.content_type or "").startswith("audio/") %}
+    <option value="{{ a.ref }}">
+  {% endfor %}
+</datalist>
+
+<datalist id="video-ref-list">
+  {% for a in assets if (a.content_type or "").startswith("video/") %}
+    <option value="{{ a.ref }}">
+  {% endfor %}
+</datalist>
+
+
 
 {% macro asset_options_all(assets) %}
   {% for a in assets %}
@@ -258,6 +271,7 @@
           <option value="markdown">markdown</option>
           <option value="video_url">video_url</option>
           <option value="video_asset">video_asset</option>
+          <option value="audio_asset">audio_asset</option>
           <option value="quiz_mcq">quiz_mcq</option>
           <option value="desmos">desmos</option>
           <option value="html_safe">html_safe</option>
@@ -428,29 +442,23 @@
 
 
           {% elif selected_block.type == "video_asset" %}
+            {% set payload = (selected_block.payload_json if selected_block else {}) or {} %}
             {% set p = selected_block.payload_json or {} %}
             <form method="post"
                   action="{{ url_for('author.lesson_block_update_form',
                                      lesson_id=lesson.id,
                                      block_id=selected_block.id) }}">
-              <label>Video asset ref</label><br>
-              <input name="ref" id="video_asset_ref" style="width:100%;" value="{{ p.get('ref','') }}">
+              <label>Pick an uploaded video</label><br>
+              <input
+                type="text"
+                name="ref"
+                id="video_asset_ref"
+                value="{{ payload.get('ref','') }}"
+                style="width:100%;"
+                list="video-ref-list"
+                placeholder="Select uploaded video ref…"
+              />
 
-              <div style="margin-top:6px;">
-                <label>Pick an uploaded video</label><br>
-                <select id="video_asset_select"
-                        onchange="document.getElementById('video_asset_ref').value=this.value;">
-                  <option value="">(select video asset)</option>
-                  {{ asset_options_all(assets) }}
-                </select>
-                <script>
-                  // filter immediately to video/*
-                  document.addEventListener("DOMContentLoaded", () => {
-                    const sel = document.getElementById("video_asset_select");
-                    filterAssetSelect(sel, "video");
-                  });
-                </script>
-              </div>
 
               <div style="margin-top:8px;">
                 <label>Caption</label><br>
@@ -466,6 +474,44 @@
                 <button type="submit">Save block</button>
               </div>
             </form>
+
+          {% elif selected_block.type == "audio_asset" %}
+            {% set payload = (selected_block.payload_json if selected_block else {}) or {} %}
+            {% set p = selected_block.payload_json or {} %}
+            <form method="post"
+                  action="{{ url_for('author.lesson_block_update_form',
+                                     lesson_id=lesson.id,
+                                     block_id=selected_block.id) }}">
+              <label>Pick an uploaded audio</label><br>
+              <input
+                type="text"
+                name="ref"
+                id="audio_asset_ref"
+                style="width:100%;"
+                value="{{ payload.get('ref','') }}"
+                list="audio-ref-list"
+                placeholder="Select uploaded audio ref…"
+              />
+
+
+              <div style="margin-top:8px;">
+                <label>Caption</label><br>
+                <input name="caption" style="width:100%;" value="{{ p.get('caption','') }}">
+              </div>
+
+              <div style="margin-top:8px;">
+                <label><input type="checkbox" name="controls" {% if p.get('controls', True) %}checked{% endif %}> Controls</label>
+                <label style="margin-left:12px;"><input type="checkbox" name="autoplay" {% if p.get('autoplay', False) %}checked{% endif %}> Autoplay</label>
+                <label style="margin-left:12px;"><input type="checkbox" name="loop" {% if p.get('loop', False) %}checked{% endif %}> Loop</label>
+              </div>
+
+              <div style="margin-top:8px;">
+                <button type="submit">Save block</button>
+              </div>
+            </form>
+
+
+
 
           {% elif selected_block.type == "desmos" %}
             {% set p = selected_block.payload_json or {} %}

@@ -142,7 +142,18 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
     if not isinstance(blocks, list) or len(blocks) == 0:
         raise ValueError("Missing/invalid 'blocks' (non-empty list)")
 
-    allowed_types = {"markdown", "video_url", "quiz_mcq"}
+
+    allowed_types = {
+        "markdown",
+        "video_url",
+        "video_asset",
+        "audio_asset",
+        "quiz_mcq",
+        "desmos",
+        "html_safe",
+        "callout",
+        "reveal",
+    }
 
     for i, b in enumerate(blocks):
         if not isinstance(b, dict):
@@ -172,6 +183,10 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.choices (list of >=2 strings)")
             if not isinstance(answer_index, int) or not (0 <= answer_index < len(choices)):
                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.answer_index (int in range)")
+        elif t in ("video_asset", "audio_asset"):
+            ref = p.get("ref")
+            if not isinstance(ref, str) or not ref.startswith("assets/"):
+                raise ValueError(f"blocks[{i}] {t} requires payload.ref like 'assets/...'")
 
     assets = payload.get("assets", [])
     if assets is not None:
@@ -691,6 +706,15 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
             "autoplay": bool(request.form.get("autoplay")),
         }
 
+    elif b.type == "audio_asset":
+        b.payload_json = {
+            "ref": (request.form.get("ref") or "").strip(),
+            "caption": (request.form.get("caption") or "").strip(),
+            "controls": bool(request.form.get("controls")),
+            "autoplay": bool(request.form.get("autoplay")),
+            "loop": bool(request.form.get("loop")),
+        }
+
     elif b.type == "desmos":
         h = request.form.get("height") or "480"
         try:
@@ -982,6 +1006,9 @@ def lesson_block_add(lesson_id: str):
         payload = {"url": "", "caption": ""}
     elif block_type == "video_asset":
         payload = {"ref": "", "caption": "", "controls": True, "autoplay": False}
+        # in lesson_block_add()
+    elif block_type == "audio_asset":
+        payload = {"ref": "", "caption": "", "controls": True, "autoplay": False, "loop": False}
     elif block_type == "desmos":
         payload = {"graph_url": "", "height": 480}
     elif block_type == "quiz_mcq":

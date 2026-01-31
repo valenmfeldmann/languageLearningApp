@@ -23,6 +23,8 @@ from app.billing.access import has_access
 
 
 
+
+
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(user_id)
@@ -165,6 +167,26 @@ def create_app():
                 "new_curriculum": safe_url("author.curriculum_new_form"),
             }
         }
+
+    import os
+    from flask import current_app
+
+    @app.context_processor
+    def inject_announcement():
+        # Use the instance folder so it's easy to update on the server
+        file_path = os.path.join(current_app.instance_path, 'announcement.txt')
+
+        announcement_text = None
+        if os.path.exists(file_path):
+            try:
+                with open(file_path, 'r', encoding='utf-8') as f:
+                    content = f.read().strip()
+                    if content:  # Only set if the file isn't empty
+                        announcement_text = content
+            except Exception:
+                pass  # Fail silently so the app doesn't crash if the file is locked
+
+        return dict(global_announcement=announcement_text)
 
     @app.before_request
     def require_subscription_everywhere():

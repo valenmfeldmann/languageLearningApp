@@ -232,30 +232,6 @@ def home():
 
 
 
-# @bp.get("/app")
-# def app_home():
-#     if not has_access(current_user):
-#         return redirect(url_for("billing.pricing"))
-#
-#     # optional: find an in-progress lesson
-#     attempt = (
-#         LessonAttempt.query
-#         .filter_by(user_id=current_user.id, completed_at=None)
-#         .order_by(
-#             desc(LessonAttempt.last_heartbeat_at),
-#             desc(LessonAttempt.started_at),
-#         )
-#         .first()
-#     )
-#
-#     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
-#
-#     return render_template(
-#         "app/home.html",
-#         continue_lesson=lesson,
-#     )
-
-
 
 
 @bp.post("/app/curriculum/<curriculum_id>/star")
@@ -307,6 +283,7 @@ def app_home():
     )
     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
 
+
     q = (request.args.get("q") or "").strip()
     subject_code = (request.args.get("subject") or "").strip() or None
     school_code = (request.args.get("school") or "").strip() or None
@@ -345,6 +322,7 @@ def app_home():
         .filter(Curriculum.is_published.is_(True))
     )
 
+
     if subject_code:
         base = base.filter(Curriculum.subject_code == subject_code)
     if school_code:
@@ -367,6 +345,16 @@ def app_home():
         .filter(CurriculumItem.item_type == "lesson")
         .filter(CurriculumItem.lesson_id.isnot(None))
         .group_by(CurriculumItem.curriculum_id)
+        .subquery()
+    )
+
+    # NEW: Attempt count subquery
+    attempt_count_sq = (
+        db.session.query(
+            LessonAttempt.curriculum_id.label("cid"),
+            func.count(LessonAttempt.id).label("attempt_count")
+        )
+        .group_by(LessonAttempt.curriculum_id)
         .subquery()
     )
 

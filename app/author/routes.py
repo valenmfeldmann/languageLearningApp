@@ -1385,8 +1385,23 @@ def curriculum_new_post():
     return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
 
 
-
-
+# @bp.get("/curriculum/<curriculum_id>/edit")
+# @login_required
+# def curriculum_edit(curriculum_id):
+#     # Use your improved permission helper
+#     _require_curriculum_perm(curriculum_id, need_edit=True)
+#
+#     cur = Curriculum.query.get_or_404(curriculum_id)
+#
+#     # NEW: You must fetch the lessons so the dropdown has data!
+#     # Adjust this query if you want to filter which lessons appear
+#     available_lessons = Lesson.query.order_by(Lesson.title.asc()).all()
+#
+#     return render_template(
+#         "author/curriculum_edit.html",
+#         curriculum=cur,
+#         available_lessons=available_lessons  # <-- Pass it here
+#     )
 
 
 
@@ -1622,6 +1637,51 @@ def curriculum_cover_remove(curriculum_id):
     cur.cover_image_url = None
     db.session.commit()
     flash("Cover image removed.", "success")
+    return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
+
+
+
+
+# @bp.post("/curriculum/<curriculum_id>/update-title")
+# @login_required
+# def curriculum_update_title(curriculum_id):
+#     # Use our updated permission helper!
+#     _require_curriculum_perm(curriculum_id, need_edit=True)
+#
+#     cur = Curriculum.query.get_or_404(curriculum_id)
+#     new_title = request.form.get("title", "").strip()
+#
+#     if not new_title:
+#         flash("Title cannot be empty", "error")
+#         return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
+#
+#     cur.title = new_title
+#     db.session.commit()
+#
+#     flash("Title updated!", "success")
+#     return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
+#
+
+
+@bp.post("/curriculum/<curriculum_id>/update-settings")
+@login_required
+def curriculum_update_settings(curriculum_id):
+    # Use your new permission logic
+    _require_curriculum_perm(curriculum_id, need_edit=True)
+
+    cur = Curriculum.query.get_or_404(curriculum_id)
+    new_title = request.form.get("title", "").strip()
+    new_desc = request.form.get("description", "").strip()
+
+    if not new_title:
+        flash("Title cannot be empty", "error")
+        return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
+
+    cur.title = new_title
+    cur.description = new_desc
+    db.session.commit()
+
+    flash("Curriculum settings updated!", "success")
     return redirect(url_for("author.curriculum_edit", curriculum_id=curriculum_id))
 
 

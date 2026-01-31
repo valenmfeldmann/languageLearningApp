@@ -549,6 +549,20 @@ def _block_template_for(block_type: str) -> str:
 @login_required
 def lesson_page(lesson_code):
     lesson = Lesson.query.filter_by(code=lesson_code).first_or_404()
+
+    is_author = (lesson.created_by_user_id == current_user.id)
+
+    # is_author = False
+    # if hasattr(lesson, 'creator_id'):
+    #     is_author = (lesson.creator_id == current_user.id)
+    # elif hasattr(lesson, 'user_id'):
+    #     is_author = (lesson.user_id == current_user.id)
+    # elif hasattr(lesson, 'author_id'):  # Just in case
+    #     is_author = (lesson.author_id == current_user.id)
+
+
+
+
     blocks = (LessonBlock.query
               .filter_by(lesson_id=lesson.id)
               .order_by(LessonBlock.position.asc())
@@ -642,6 +656,7 @@ def lesson_page(lesson_code):
         quiz_feedback=quiz_feedback,
         can_complete=can_complete,
         attempt=attempt,  # <-- critical for hidden inputs
+        is_author=is_author,
     )
 
 

@@ -35,11 +35,32 @@
 
 {% block content %}
 <div class="lesson-container lesson-shell panel">
-  
-  <header style="margin-bottom: 30px;">
-    <h1 style="margin-bottom: 5px;">{{ lesson.title }}</h1>
-    <p class="muted">Lesson Attempt #{{ attempt.id }}</p>
+
+
+
+
+  <header style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-start;">
+    <div>
+      <h1 style="margin-bottom: 5px;">{{ lesson.title }}</h1>
+      <div style="display: flex; gap: 15px; align-items: center;">
+        <span class="muted" style="font-size: 13px;">Attempt #{{ attempt.id[:8] }}</span>
+        {% if is_author %}
+          <span style="background: rgba(168,199,255,0.1); color: var(--link); padding: 2px 8px; border-radius: 4px; font-size: 11px; font-weight: bold; text-transform: uppercase;">Author View</span>
+        {% endif %}
+      </div>
+    </div>
+
+    {% if is_author %}
+      <a href="{{ url_for('author.lesson_edit', lesson_id=lesson.id) }}"
+         class="btn"
+         style="background: #1a1a1a; border: 1px solid #333; color: white; padding: 10px 18px; border-radius: 10px; text-decoration: none; font-size: 14px; display: flex; align-items: center; gap: 8px; transition: border-color 0.2s;">
+         <span>✏️</span> Edit Lesson
+      </a>
+    {% endif %}
   </header>
+
+
+
 
   {% for item in block_views %}
     {% set b = item.b %}

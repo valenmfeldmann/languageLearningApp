@@ -5,6 +5,40 @@
 
 <style>
 
+
+
+  /* High-contrast workspace for the active block */
+  .active-block-workspace {
+    background: rgba(16, 20, 32, 0.6);
+    border: 1px solid var(--link); /* Using your primary blue/cyan variable */
+    border-radius: 14px;
+    padding: 24px;
+    box-shadow: 0 0 20px rgba(168, 199, 255, 0.1);
+  }
+
+  /* Make inputs look more like a professional IDE */
+  .active-block-workspace input,
+  .active-block-workspace textarea,
+  .active-block-workspace select {
+    background: #000 !important;
+    border: 1px solid #333 !important;
+    color: #fff !important;
+    border-radius: 8px !important;
+    padding: 10px !important;
+    margin-top: 4px;
+  }
+
+  .active-block-workspace label {
+    font-size: 0.8rem;
+    font-weight: bold;
+    color: var(--muted);
+    text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+
+
+
+
   /* Asset ref inputs */
   .asset-input {
     width: 100%;
@@ -129,12 +163,6 @@
 
   <h1>Edit lesson: {{ lesson.title }}</h1>
 
-  <div style="margin-bottom:12px;">
-    <button type="button" onclick="copyLLMInstructions()">
-      Copy JSON formatting instructions to clipboard (for LLM assistance)
-    </button>
-    <small id="llmCopyStatus" style="margin-left:8px;"></small>
-  </div>
 
   <script>
     async function copyLLMInstructions() {
@@ -361,90 +389,121 @@
     <!-- MIDDLE: inspector + resize handle -->
     <div class="col-mid-wrap">
       <div class="col-mid">
-        <h3>Lesson metadata</h3>
+        <h3>Lesson metadata and block editor</h3>
 
         <!-- EVERYTHING that used to be in the middle column goes here -->
   <!--        -->
-        <hr>
-          <details>
-            <summary style="cursor:pointer; font-weight:bold;">
-              Apply full lesson JSON (LLM / power-user)
+
+
+
+        <details class="panel" style="margin-bottom: 30px; border: 1px solid rgba(168,199,255,0.15); border-radius: 14px; overflow: hidden; cursor: pointer;">
+            <summary style="padding: 16px 20px; color: var(--link); font-weight: bold; list-style: none; display: flex; justify-content: space-between; align-items: center; background: rgba(255,255,255,0.02);">
+                <span>⚙️ Lesson Settings & Metadata</span>
+                <span class="muted" style="font-size: 12px; font-weight: 400;">(Click to edit title, visibility, or import JSON)</span>
             </summary>
 
-            <div style="margin-top:10px;">
-              <form method="post" enctype="multipart/form-data"
-                    action="{{ url_for('author.lesson_apply_json', lesson_id=lesson.id) }}">
-                <div>
-                  <label>Paste lesson JSON</label><br>
-                  <textarea name="lesson_json_text" rows="10" style="width:100%;"
-                            placeholder='{"code":"...","title":"...","blocks":[...]}'></textarea>
-                </div>
+            <div style="padding: 24px; cursor: default; background: rgba(10, 12, 18, 0.4);">
 
-                <div style="margin-top:10px;">
-                  <label>or upload lesson.json</label><br>
-                  <input type="file" name="lesson_json" accept="application/json,.json">
-                </div>
+                <form method="post" action="{{ url_for('author.lesson_edit_meta', lesson_id=lesson.id) }}">
+                    <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <div>
+                                <label class="muted small" style="display:block; margin-bottom:5px; font-weight:bold;">TITLE</label>
+                                <input name="title" value="{{ lesson.title }}" style="width: 100%; padding: 10px; background: #000; border: 1px solid #333; color: white; border-radius: 8px;">
+                            </div>
+                            <div>
+                                <label class="muted small" style="display:block; margin-bottom:5px; font-weight:bold;">DESCRIPTION</label>
+                                <textarea name="description" rows="3" style="width: 100%; padding: 10px; background: #000; border: 1px solid #333; color: white; border-radius: 8px;">{{ lesson.description or "" }}</textarea>
+                            </div>
+                        </div>
 
-                <div style="margin-top:10px;">
-                  <label>assets.zip (optional)</label><br>
-                  <input type="file" name="assets_zip" accept="application/zip,.zip">
-                </div>
+                        <div style="display: flex; flex-direction: column; gap: 15px;">
+                            <div>
+                                <label class="muted small" style="display:block; margin-bottom:5px; font-weight:bold;">VISIBILITY</label>
+                                <select name="visibility" style="width: 100%; padding: 10px; background: #000; border: 1px solid #333; color: white; border-radius: 8px;">
+                                    <option value="private" {% if lesson.visibility == 'private' %}selected{% endif %}>private</option>
+                                    <option value="public" {% if lesson.visibility == 'public' %}selected{% endif %}>public</option>
+                                </select>
+                            </div>
+                            <div style="padding: 10px 0;">
+                                <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+                                    <input type="checkbox" name="is_published" {% if lesson.is_published %}checked{% endif %} style="width:18px; height:18px;">
+                                    <span style="font-weight: bold;">Published</span>
+                                </label>
+                                <p class="muted" style="font-size: 11px; margin-top: 5px;">Uncheck this to hide the lesson from all public lists. (It can still be found if you embed it in another curriculum)</p>
+                            </div>
+                            <div style="margin-top: auto; text-align: right;">
+                                <button type="submit" class="btn primary" style="padding: 10px 24px;">Save Lesson Metadata</button>
+                            </div>
+                        </div>
+                    </div>
+                </form>
 
-                <div style="margin-top:10px;">
-                  <button type="submit" onclick="return confirm('This will replace ALL blocks and assets for this lesson. Continue?')">
-                    Apply JSON (replaces lesson contents)
-                  </button>
-                </div>
-              </form>
+                <div style="margin-top: 30px; border-top: 1px solid #222; padding-top: 20px;">
+                    <details style="border: 1px solid #331111; border-radius: 8px; overflow: hidden;">
+                        <summary style="padding: 10px 15px; font-size: 0.85rem; color: #cc6666; font-weight: bold; cursor: pointer; background: rgba(122, 30, 30, 0.05);">
+                            ⚠️ Danger Zone: Apply Full Lesson JSON (LLM / Power-User)
+                        </summary>
 
+                        <div style="margin-bottom:12px;">
+                          <button type="button" onclick="copyLLMInstructions()">
+                            Copy JSON formatting instructions to clipboard (for LLM assistance)
+                          </button>
+                          <small id="llmCopyStatus" style="margin-left:8px;"></small>
+                        </div>
+
+
+                        <div style="padding: 15px; background: #0a0000;">
+                            <form method="post" enctype="multipart/form-data" action="{{ url_for('author.lesson_apply_json', lesson_id=lesson.id) }}">
+                                <div style="margin-bottom: 15px;">
+                                    <label class="muted small" style="display:block; margin-bottom:5px;">PASTE JSON TEXT</label>
+                                    <textarea name="lesson_json_text" rows="8" style="width:100%; font-family: monospace; font-size: 12px; background: #000; color: #00ff00; border: 1px solid #222; padding: 10px;"
+                                              placeholder='{"code":"...","title":"...","blocks":[...]}'></textarea>
+                                </div>
+
+                                <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px; margin-bottom: 20px;">
+                                    <div>
+                                        <label class="muted small" style="display:block; margin-bottom:5px;">UPLOAD LESSON.JSON</label>
+                                        <input type="file" name="lesson_json" accept="application/json,.json" style="font-size: 12px;">
+                                    </div>
+                                    <div>
+                                        <label class="muted small" style="display:block; margin-bottom:5px;">ASSETS.ZIP (OPTIONAL)</label>
+                                        <input type="file" name="assets_zip" accept="application/zip,.zip" style="font-size: 12px;">
+                                    </div>
+                                </div>
+
+                                <button type="submit" style="background: #7a1e1e; color: white; border: none; padding: 10px 15px; border-radius: 6px; width: 100%; font-weight: bold;"
+                                        onclick="return confirm('This will replace ALL blocks and assets for this lesson. Continue?')">
+                                    Overwrite Lesson with JSON Content
+                                </button>
+                            </form>
+                        </div>
+                    </details>
+                </div>
             </div>
         </details>
 
 
 
-  <!---->
-        <form method="post" action="{{ url_for('author.lesson_edit_meta', lesson_id=lesson.id) }}">
-          <div>
-            <label>Title</label><br>
-            <input name="title" value="{{ lesson.title }}">
-          </div>
 
-          <div style="margin-top:12px;">
-            <label>Description</label><br>
-            <textarea name="description" rows="3">{{ lesson.description or "" }}</textarea>
-          </div>
+        <div style="display: flex; align-items: center; gap: 12px; margin-bottom: 20px;">
+            <h2 style="margin:0; font-size: 1.25rem;">Block Editor</h2>
+            {% if selected_block %}
+              <span style="background: var(--link); color: #000; padding: 2px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 900; text-transform: uppercase; letter-spacing: 0.5px;">
+                {{ selected_block.type }}
+              </span>
+            {% endif %}
+        </div>
 
-          <div style="margin-top:12px;">
-            <label>Language code</label><br>
-            <input name="language_code" value="{{ lesson.language_code or '' }}">
-          </div>
+        <div class="active-block-workspace">
+            {% if selected_block %}
+              <div style="margin-bottom: 25px;">
+                <p class="muted" style="font-size: 0.9rem; margin: 0;">Editing block <code>{{ selected_block.id[:8] }}</code></p>
+              </div>
 
-          <div style="margin-top:12px;">
-            <label>Visibility</label><br>
-            <select name="visibility">
-              <option value="private" {% if lesson.visibility == 'private' %}selected{% endif %}>private</option>
-              <option value="public" {% if lesson.visibility == 'public' %}selected{% endif %}>public</option>
-            </select>
-          </div>
 
-          <div style="margin-top:12px;">
-            <label>
-              <input type="checkbox" name="is_published" {% if lesson.is_published %}checked{% endif %}>
-              Published
-            </label>
-          </div>
-
-          <div style="margin-top:12px;">
-            <button type="submit">Save lesson</button>
-          </div>
-        </form>
-
-        <hr>
-
-  <!--      -->
-        <h3>Block editor</h3>
-        {% if selected_block %}
-          <p><b>{{ selected_block.type }}</b></p>
+<!--        {% if selected_block %}-->
+<!--          <p><b>{{ selected_block.type }}</b></p>-->
 
           {# ---------- FRIENDLY FORM ---------- #}
           {% if selected_block.type == "markdown" %}
@@ -806,9 +865,56 @@
         {% else %}
           <p>No blocks yet.</p>
         {% endif %}
+
+
+
+        <div style="margin-top: 40px; padding-top: 25px; border-top: 1px solid rgba(255,255,255,0.08);">
+                  <details style="background: rgba(0,0,0,0.2); border: 1px solid #222; border-radius: 10px; overflow: hidden;">
+                    <summary style="padding: 12px 16px; font-size: 0.85rem; color: var(--muted); cursor: pointer; font-weight: bold; background: rgba(255,255,255,0.02);">
+                      🛠️ Advanced: Edit Raw Block JSON
+                    </summary>
+
+                    <div style="padding: 16px; cursor: default;">
+                      <p class="muted" style="font-size: 12px; margin-bottom: 12px;">Use this to modify specific block attributes not available in the friendly editor.</p>
+                      <form method="post" action="{{ url_for('author.lesson_block_update', lesson_id=lesson.id, block_id=selected_block.id) }}">
+                        <textarea name="payload_json" rows="12"
+                                  style="width:100%; font-family: 'JetBrains Mono', 'Courier New', monospace; font-size: 12px; background: #000; color: #00ffcc; border: 1px solid #333; padding: 12px; border-radius: 6px;">{{ selected_block.payload_json | tojson(indent=2) }}</textarea>
+                        <div style="margin-top: 12px; text-align: right;">
+                          <button type="submit" class="btn small" style="background: #222;">Save Raw JSON</button>
+                        </div>
+                      </form>
+                    </div>
+                  </details>
+              </div>
+
+            {% else %}
+              <div style="text-align: center; padding: 80px 20px;" class="muted">
+                <div style="font-size: 2rem; margin-bottom: 15px; opacity: 0.3;">📋</div>
+                <p style="margin: 0; font-weight: bold;">No block selected</p>
+                <p style="margin: 5px 0 0 0; font-size: 0.9rem;">Click a block in the right sidebar to start editing its content.</p>
+              </div>
+            {% endif %}
+        </div>
+
+
       </div>
       <div class="resize-handle" id="resizeHandle" title="Drag to resize"></div>
     </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
 
     <!-- RIGHT: preview -->
     <div class="col-right">
@@ -893,4 +999,3 @@ async function copyHtmlSafeInstructions() {
 }
 </script>
 {% endblock %}
-

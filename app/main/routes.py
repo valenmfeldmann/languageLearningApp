@@ -47,6 +47,10 @@ from flask import abort, redirect, request, url_for
 from flask_login import login_required, current_user
 from app.extensions import db
 from app.models import Curriculum, UserCurriculumStar
+import os
+from flask import current_app
+
+
 
 
 
@@ -2098,3 +2102,20 @@ def trivia_bad_vote():
 
 
 
+@bp.get("/thanks")
+def thanks_page():
+    # Construct path to instance/names.txt
+    # current_app.instance_path points to your /instance folder
+    file_path = os.path.join(current_app.instance_path, 'names.txt')
+
+    names = []
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                # Clean up whitespace and ignore empty lines
+                names = [line.strip() for line in f if line.strip()]
+        except Exception:
+            # Fallback if file is busy or unreadable
+            names = ["Error loading names"]
+
+    return render_template("main/thanks.html", names=names)

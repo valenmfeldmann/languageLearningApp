@@ -744,6 +744,7 @@
 
         <span style="opacity:.35; padding:0 6px;">|</span>
 
+
         <a class="navlink" href="{{ url_for('appui.account') }}">Account</a>
 
         {% if current_user.is_authenticated %}
@@ -763,6 +764,12 @@
           </a>
 
         {% endif %}
+
+        <span style="opacity:.35; padding:0 6px;">|</span>
+
+        <a class="navlink" href="{{ url_for('main.thanks_page') }}">Thanks</a>
+
+
       </nav>
 
       {% if an_warn %}

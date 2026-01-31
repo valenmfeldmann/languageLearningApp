@@ -1,0 +1,31 @@
+{% extends "base.html" %}
+
+{% block title %}Special Thanks - GamifySchool{% endblock %}
+
+{% block content %}
+<div class="container" style="max-width: 600px; margin-top: 40px;">
+    <div class="panel" style="padding: 30px; text-align: center;">
+        <h1 style="margin-top: 0; color: var(--link);">Special Thanks</h1>
+        <p class="muted">To the people making this project possible:</p>
+        
+        <hr>
+
+        <div style="display: flex; flex-direction: column; gap: 12px; margin-top: 20px;">
+            {% if names %}
+                {% for name in names %}
+                    <div class="userpill" style="justify-content: center; padding: 12px; font-size: 1.1rem;">
+                        <span class="dot"></span>
+                        {{ name }}
+                    </div>
+                {% endfor %}
+            {% else %}
+                <p class="muted italic">No names added yet.</p>
+            {% endif %}
+        </div>
+
+        <div style="margin-top: 40px;">
+            <a href="{{ url_for('main.app_home') }}" class="btn primary">Return Home</a>
+        </div>
+    </div>
+</div>
+{% endblock %}

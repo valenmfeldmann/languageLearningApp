@@ -49,7 +49,6 @@ from app.extensions import db
 from app.models import Curriculum, UserCurriculumStar
 import os
 from flask import current_app
-from sqlalchemy import or_, case
 
 
 
@@ -235,6 +234,8 @@ def home():
 
 
 
+
+
 @bp.post("/app/curriculum/<curriculum_id>/star")
 @login_required
 def curriculum_star(curriculum_id: str):
@@ -269,14 +270,12 @@ def curriculum_unstar(curriculum_id: str):
 
 
 
+from sqlalchemy import or_, case
 
 @bp.get("/app")
 def app_home():
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
-
-    # Add 'or_' to your sqlalchemy imports at the top of the file if not there:
-    # from sqlalchemy import or_
 
     attempt = (
         LessonAttempt.query
@@ -298,7 +297,10 @@ def app_home():
         .order_by(LessonSubject.name.asc())
         .all()
     )
-    subject_name_by_code = {s.code: s.name for s in subjects}
+    subject_name_by_code = {
+        s.code: s.name
+        for s in subjects
+    }
 
     school_rows = (
         db.session.query(Curriculum.school_code)
@@ -308,7 +310,11 @@ def app_home():
         .all()
     )
     schools = [r[0] for r in school_rows if r[0]]
-    school_name_by_code = {sc: sc.replace("_", " ").title() for sc in schools}
+
+    school_name_by_code = {
+        sc: sc.replace("_", " ").title()
+        for sc in schools
+    }
 
     # ---------- base query ----------
     base = (
@@ -324,14 +330,13 @@ def app_home():
 
     if q:
         like = f"%{q}%"
-        from sqlalchemy import or_ # Ensure this is available
         base = base.filter(or_(
             Curriculum.title.ilike(like),
             Curriculum.description.ilike(like),
             Curriculum.code.ilike(like),
         ))
 
-    # ---------- stats subqueries ----------
+    # ---------- stats subquery ----------
     lesson_count_sq = (
         db.session.query(
             CurriculumItem.curriculum_id.label("cid"),
@@ -343,24 +348,14 @@ def app_home():
         .subquery()
     )
 
-    attempt_count_sq = (
-        db.session.query(
-            LessonAttempt.curriculum_id.label("cid"),
-            func.count(LessonAttempt.id).label("attempt_count")
-        )
-        .group_by(LessonAttempt.curriculum_id)
-        .subquery()
-    )
-
     an_asset = get_an_asset()
     ab = AccessBalance
     s = UserCurriculumStar
 
-    # joins - Added the attempt_count_sq join here
+    # joins
     base = (
         base
         .outerjoin(lesson_count_sq, lesson_count_sq.c.cid == Curriculum.id)
-        .outerjoin(attempt_count_sq, attempt_count_sq.c.cid == Curriculum.id)
         .outerjoin(ab, (ab.account_id == Curriculum.wallet_account_id) & (ab.asset_id == an_asset.id))
         .outerjoin(s, (s.curriculum_id == Curriculum.id) & (s.user_id == current_user.id))
     )
@@ -368,11 +363,10 @@ def app_home():
     if starred_only:
         base = base.filter(s.user_id.isnot(None))
 
-    # select entities - Included attempt_count here
+    # select once (keep is_starred!)
     base = base.with_entities(
         Curriculum,
         func.coalesce(lesson_count_sq.c.lesson_count, 0).label("lesson_count"),
-        func.coalesce(attempt_count_sq.c.attempt_count, 0).label("attempt_count"),
         func.coalesce(ab.balance, 0).label("wallet_ticks"),
         case((s.user_id.isnot(None), True), else_=False).label("is_starred"),
     )
@@ -388,12 +382,10 @@ def app_home():
     rows = base.limit(60).all()
 
     cards = []
-    # Updated unpacking to include attempt_count
-    for cur, lesson_count, attempt_count, wallet_ticks, is_starred in rows:
+    for cur, lesson_count, wallet_ticks, is_starred in rows:
         cards.append({
             "curriculum": cur,
             "lesson_count": int(lesson_count or 0),
-            "attempt_count": int(attempt_count or 0),
             "market_cap_an": int(wallet_ticks or 0) / AN_SCALE,
             "wallet_ticks": int(wallet_ticks or 0),
             "is_starred": bool(is_starred),

@@ -60,46 +60,79 @@ def _require_lesson_edit_perm(lesson: Lesson) -> None:
         raise PermissionError("not_lesson_owner")
 
 
+# def _require_curriculum_perm(curriculum_id: str, *, need_edit: bool = False, need_manage: bool = False):
+#     from app.models import CurriculumOwner, CurriculumEditor
+#
+#     # Owner row (shareholders)
+#     row = (CurriculumOwner.query
+#            .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
+#            .one_or_none())
+#
+#     # Editor row (non-owners)
+#     ed = (CurriculumEditor.query
+#           .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
+#           .one_or_none())
+#
+#     # "has any relationship"
+#     if (not row or row.shares <= 0) and not ed:
+#         raise PermissionError("not_owner_or_editor")
+#
+#     # Manage stays “top owner only” (your existing rule)
+#     if need_manage:
+#         if not row or row.shares <= 0:
+#             raise PermissionError("not_admin")
+#         top = (CurriculumOwner.query
+#                .filter_by(curriculum_id=curriculum_id)
+#                .order_by(CurriculumOwner.shares.desc(),
+#                          CurriculumOwner.created_at.asc(),
+#                          CurriculumOwner.id.asc())
+#                .first())
+#         is_owner = bool(top and top.user_id == current_user.id)
+#         if not is_owner:
+#             raise PermissionError("not_admin")
+#
+#     # Edit: owners with can_edit OR editors with can_edit
+#     if need_edit:
+#         owner_ok = bool(row and row.shares > 0 and row.can_edit)
+#         editor_ok = bool(ed and ed.can_edit)
+#         if not (owner_ok or editor_ok):
+#             raise PermissionError("not_editor")
+#
+#     return row
+
+
 def _require_curriculum_perm(curriculum_id: str, *, need_edit: bool = False, need_manage: bool = False):
     from app.models import CurriculumOwner, CurriculumEditor
+    from flask import abort
 
-    # Owner row (shareholders)
-    row = (CurriculumOwner.query
-           .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
-           .one_or_none())
+    # 1. Fetch the relationship rows
+    row = CurriculumOwner.query.filter_by(curriculum_id=curriculum_id, user_id=current_user.id).one_or_none()
+    ed = CurriculumEditor.query.filter_by(curriculum_id=curriculum_id, user_id=current_user.id).one_or_none()
 
-    # Editor row (non-owners)
-    ed = (CurriculumEditor.query
-          .filter_by(curriculum_id=curriculum_id, user_id=current_user.id)
-          .one_or_none())
-
-    # "has any relationship"
+    # 2. Basic Access: Must have some relationship to the project
     if (not row or row.shares <= 0) and not ed:
-        raise PermissionError("not_owner_or_editor")
+        abort(403)
 
-    # Manage stays “top owner only” (your existing rule)
+    # 3. Manage Permission: This is what you wanted to change.
+    # We now allow ANY owner with shares OR ANY editor with can_edit to add others.
     if need_manage:
-        if not row or row.shares <= 0:
-            raise PermissionError("not_admin")
-        top = (CurriculumOwner.query
-               .filter_by(curriculum_id=curriculum_id)
-               .order_by(CurriculumOwner.shares.desc(),
-                         CurriculumOwner.created_at.asc(),
-                         CurriculumOwner.id.asc())
-               .first())
-        is_owner = bool(top and top.user_id == current_user.id)
-        if not is_owner:
-            raise PermissionError("not_admin")
+        owner_can_manage = bool(row and row.shares > 0 and row.can_edit)
+        editor_can_manage = bool(ed and ed.can_edit)
 
-    # Edit: owners with can_edit OR editors with can_edit
+        if not (owner_can_manage or editor_can_manage):
+            # If you still want a "Super Admin" level for deleting the curriculum,
+            # you would check for the Top Owner here. But for adding editors,
+            # we just need to know they are an authorized editor.
+            abort(403)
+
+    # 4. Edit Permission: Content changes
     if need_edit:
         owner_ok = bool(row and row.shares > 0 and row.can_edit)
         editor_ok = bool(ed and ed.can_edit)
         if not (owner_ok or editor_ok):
-            raise PermissionError("not_editor")
+            abort(403)
 
     return row
-
 
 def _load_json_file(file_storage) -> dict[str, Any]:
     raw = file_storage.read()

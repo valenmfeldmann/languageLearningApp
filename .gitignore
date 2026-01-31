@@ -13,3 +13,5 @@ deploy/certbot-www/
 
 # local runtime
 instance/
+
+app/static/user_uploads

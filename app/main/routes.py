@@ -277,6 +277,7 @@ def app_home():
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
 
+    # 1. Handle "Continue Watching" logic
     attempt = (
         LessonAttempt.query
         .filter_by(user_id=current_user.id, completed_at=None)
@@ -285,22 +286,21 @@ def app_home():
     )
     lesson = Lesson.query.get(attempt.lesson_id) if attempt else None
 
+    # 2. Get Request Params
     q = (request.args.get("q") or "").strip()
     subject_code = (request.args.get("subject") or "").strip() or None
     school_code = (request.args.get("school") or "").strip() or None
     sort = (request.args.get("sort") or "new").strip()
     starred_only = (request.args.get("starred") or "").strip().lower() in ("1", "true", "yes", "on")
 
+    # 3. Fetch Filter Options
     subjects = (
         LessonSubject.query
         .filter(LessonSubject.active.is_(True))
         .order_by(LessonSubject.name.asc())
         .all()
     )
-    subject_name_by_code = {
-        s.code: s.name
-        for s in subjects
-    }
+    subject_name_by_code = {s.code: s.name for s in subjects}
 
     school_rows = (
         db.session.query(Curriculum.school_code)
@@ -310,33 +310,9 @@ def app_home():
         .all()
     )
     schools = [r[0] for r in school_rows if r[0]]
+    school_name_by_code = {sc: sc.replace("_", " ").title() for sc in schools}
 
-    school_name_by_code = {
-        sc: sc.replace("_", " ").title()
-        for sc in schools
-    }
-
-    # ---------- base query ----------
-    base = (
-        Curriculum.query
-        .filter(Curriculum.is_archived.is_(False))
-        .filter(Curriculum.is_published.is_(True))
-    )
-
-    if subject_code:
-        base = base.filter(Curriculum.subject_code == subject_code)
-    if school_code:
-        base = base.filter(Curriculum.school_code == school_code)
-
-    if q:
-        like = f"%{q}%"
-        base = base.filter(or_(
-            Curriculum.title.ilike(like),
-            Curriculum.description.ilike(like),
-            Curriculum.code.ilike(like),
-        ))
-
-    # ---------- stats subquery ----------
+    # 4. Define Subqueries (The engine for your stats)
     lesson_count_sq = (
         db.session.query(
             CurriculumItem.curriculum_id.label("cid"),
@@ -348,14 +324,46 @@ def app_home():
         .subquery()
     )
 
+    # NEW: Aggregating all attempts across the curriculum
+    attempt_count_sq = (
+        db.session.query(
+            LessonAttempt.curriculum_id.label("cid"),
+            func.count(LessonAttempt.id).label("attempt_count")
+        )
+        .group_by(LessonAttempt.curriculum_id)
+        .subquery()
+    )
+
+    # 5. Build Main Query
     an_asset = get_an_asset()
     ab = AccessBalance
     s = UserCurriculumStar
 
-    # joins
+    base = (
+        Curriculum.query
+        .filter(Curriculum.is_archived.is_(False))
+        .filter(Curriculum.is_published.is_(True))
+    )
+
+    # Apply Search Filters
+    if subject_code:
+        base = base.filter(Curriculum.subject_code == subject_code)
+    if school_code:
+        base = base.filter(Curriculum.school_code == school_code)
+    if q:
+        from sqlalchemy import or_
+        like = f"%{q}%"
+        base = base.filter(or_(
+            Curriculum.title.ilike(like),
+            Curriculum.description.ilike(like),
+            Curriculum.code.ilike(like),
+        ))
+
+    # 6. Joins & Entities (Crucial for preventing 500 errors)
     base = (
         base
         .outerjoin(lesson_count_sq, lesson_count_sq.c.cid == Curriculum.id)
+        .outerjoin(attempt_count_sq, attempt_count_sq.c.cid == Curriculum.id)
         .outerjoin(ab, (ab.account_id == Curriculum.wallet_account_id) & (ab.asset_id == an_asset.id))
         .outerjoin(s, (s.curriculum_id == Curriculum.id) & (s.user_id == current_user.id))
     )
@@ -363,15 +371,16 @@ def app_home():
     if starred_only:
         base = base.filter(s.user_id.isnot(None))
 
-    # select once (keep is_starred!)
+    # We are selecting 5 distinct items here
     base = base.with_entities(
         Curriculum,
         func.coalesce(lesson_count_sq.c.lesson_count, 0).label("lesson_count"),
+        func.coalesce(attempt_count_sq.c.attempt_count, 0).label("attempt_count"),
         func.coalesce(ab.balance, 0).label("wallet_ticks"),
         case((s.user_id.isnot(None), True), else_=False).label("is_starred"),
     )
 
-    # sorting
+    # 7. Sorting & Execution
     if sort == "title":
         base = base.order_by(Curriculum.title.asc())
     elif sort == "market_cap":
@@ -381,11 +390,13 @@ def app_home():
 
     rows = base.limit(60).all()
 
+    # 8. Unpacking Results (Match the 5 items from with_entities)
     cards = []
-    for cur, lesson_count, wallet_ticks, is_starred in rows:
+    for cur, lesson_count, attempt_count, wallet_ticks, is_starred in rows:
         cards.append({
             "curriculum": cur,
             "lesson_count": int(lesson_count or 0),
+            "attempt_count": int(attempt_count or 0),
             "market_cap_an": int(wallet_ticks or 0) / AN_SCALE,
             "wallet_ticks": int(wallet_ticks or 0),
             "is_starred": bool(is_starred),
@@ -405,8 +416,6 @@ def app_home():
         subject_name_by_code=subject_name_by_code,
         school_name_by_code=school_name_by_code,
     )
-
-
 
 
 @bp.get("/pricing")

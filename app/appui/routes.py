@@ -4,7 +4,7 @@ from flask_login import login_required, current_user
 
 from . import bp  # 👈 THIS is the missing line
 
-from app.models import Subscription, Plan
+from app.models import Subscription, Plan, Curriculum, CurriculumItem
 from app.billing.access import has_access, get_credit_balance_cents
 from app.billing.pricing import buddy_discount_multiplier
 from .portfolio import get_user_portfolio_view
@@ -24,7 +24,6 @@ from app.access_ledger.service import (
     get_user_level_multiplier
 )
 from .. import db
-
 
 
 
@@ -235,7 +234,114 @@ def trivia_page():
                            subjects=subjects, subject_code=subject_code, q=search_text)
 
 
-@bp.post("/trivia/answer")
+# @bp.post("/trivia/answer")
+# @login_required
+# def trivia_answer():
+#     if not has_access(current_user):
+#         return redirect(url_for("billing.pricing"))
+#
+#     block_id = (request.form.get("block_id") or "").strip()
+#     choice_raw = request.form.get("choice_index")
+#     subject_code = (request.form.get("subject") or "").strip() or None
+#     search_text = (request.form.get("q") or "").strip() or None
+#
+#     if not block_id or choice_raw is None:
+#         abort(400)
+#
+#     block = LessonBlock.query.filter_by(id=block_id, type="quiz_mcq").one_or_none()
+#     if not block:
+#         abort(404)
+#
+#     try:
+#         choice_index = int(choice_raw)
+#     except ValueError:
+#         abort(400)
+#
+#     correct_index = int(block.payload_json.get("answer_index", -1))
+#     is_correct = (choice_index == correct_index)
+#
+#     base_ticks = 0
+#     if is_correct:
+#         base_ticks = 1 + int(random.expovariate(1 / 10.0))
+#
+#     mult = get_user_level_multiplier(current_user.id)
+#     payout_ticks = int(round(base_ticks * mult))
+#
+#     # Keep “correct” always rewarding at least 1 tick if base > 0
+#     if base_ticks > 0 and payout_ticks <= 0:
+#         payout_ticks = 1
+#
+#     # record attempt
+#     ans = TriviaAnswer(
+#         user_id=current_user.id,
+#         lesson_block_id=block.id,
+#         chosen_index=choice_index,
+#         is_correct=bool(is_correct),
+#         payout_ticks=int(payout_ticks),
+#         subject_code=subject_code,
+#         search_text=search_text,
+#     )
+#     db.session.add(ans)
+#     db.session.flush()  # so ans.id exists
+#
+#     # mint reward idempotently per trivia answer row
+#     if payout_ticks > 0:
+#         issuer = get_or_create_system_account("rewards_pool")
+#         user_wallet = get_or_create_user_wallet(current_user.id)
+#         an = get_an_asset()
+#
+#         post_access_txn(
+#             event_type="trivia_correct_reward",
+#             idempotency_key=f"trivia_answer_reward:{ans.id}",
+#             actor_user_id=current_user.id,
+#             context_type="trivia_answer",
+#             context_id=str(ans.id),
+#             memo_json={
+#                 "base_ticks": base_ticks,
+#                 "mult": mult,
+#                 "payout_ticks": payout_ticks,
+#                 "lesson_block_id": block.id
+#             },
+#             entries=[
+#                 EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-payout_ticks, entry_type="mint"),
+#                 EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
+#             ],
+#         )
+#
+#     db.session.commit()
+#
+#
+#     # Normal correctness feedback
+#     if is_correct:
+#         flash("Correct!", "success")
+#         if payout_ticks > 0:
+#             # special category format: "reward:<ticks>"
+#             flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
+#     else:
+#         flash("Nope.", "error")
+#
+#     return redirect(url_for("appui.trivia_page", subject=subject_code or "", q=search_text or ""))
+
+
+
+from flask_login import current_user
+from app.models import AnalyticsEvent
+from app.extensions import db
+
+def log_event(event_name, entity_type=None, entity_id=None, props=None):
+    """Utility to log an analytics event with user context."""
+    evt = AnalyticsEvent(
+        event_type=event_name,
+        entity_type=entity_type,
+        entity_id=entity_id,
+        user_id=current_user.id if current_user.is_authenticated else None, # Links the user
+        props_json=props or {}
+    )
+    db.session.add(evt)
+    return evt
+
+
+@bp.post("/app/trivia/answer")
 @login_required
 def trivia_answer():
     if not has_access(current_user):
@@ -261,35 +367,62 @@ def trivia_answer():
     correct_index = int(block.payload_json.get("answer_index", -1))
     is_correct = (choice_index == correct_index)
 
-    base_ticks = 0
+    payout_ticks = 0
+    associated_curs = []  # FIX: Initialize here so it's always accessible
+
     if is_correct:
+        # 1. Calculate Payout
         base_ticks = 1 + int(random.expovariate(1 / 10.0))
+        mult = get_user_level_multiplier(current_user.id) if 'get_user_level_multiplier' in globals() else 1.0
+        payout_ticks = int(round(base_ticks * mult))
+        if payout_ticks <= 0: payout_ticks = 1
 
-    mult = get_user_level_multiplier(current_user.id)
-    payout_ticks = int(round(base_ticks * mult))
+        # 2. Record the Answer Row
+        ans = TriviaAnswer(
+            user_id=current_user.id,
+            lesson_block_id=block.id,
+            chosen_index=choice_index,
+            is_correct=True,
+            payout_ticks=payout_ticks,
+            subject_code=subject_code,
+            search_text=search_text,
+        )
+        db.session.add(ans)
+        db.session.flush()
 
-    # Keep “correct” always rewarding at least 1 tick if base > 0
-    if base_ticks > 0 and payout_ticks <= 0:
-        payout_ticks = 1
-
-    # record attempt
-    ans = TriviaAnswer(
-        user_id=current_user.id,
-        lesson_block_id=block.id,
-        chosen_index=choice_index,
-        is_correct=bool(is_correct),
-        payout_ticks=int(payout_ticks),
-        subject_code=subject_code,
-        search_text=search_text,
-    )
-    db.session.add(ans)
-    db.session.flush()  # so ans.id exists
-
-    # mint reward idempotently per trivia answer row
-    if payout_ticks > 0:
+        # 3. Handle Ledger & Curriculum Bonuses
         issuer = get_or_create_system_account("rewards_pool")
         user_wallet = get_or_create_user_wallet(current_user.id)
         an = get_an_asset()
+
+        entries = [
+            EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
+        ]
+
+        curriculum_bonus_total = 0
+        bonus_per_cur = int(round(payout_ticks * 0.10))
+
+        # Find every curriculum that includes the lesson this block belongs to
+        associated_curs = (Curriculum.query
+                           .join(CurriculumItem)
+                           .filter(CurriculumItem.lesson_id == block.lesson_id)
+                           .all())
+
+        if bonus_per_cur > 0:
+            for cur in associated_curs:
+                if cur.wallet_account_id:
+                    curriculum_bonus_total += bonus_per_cur
+                    entries.append(
+                        EntrySpec(
+                            account_id=cur.wallet_account_id,
+                            asset_id=an.id,
+                            delta=+bonus_per_cur,
+                            entry_type="mint"
+                        )
+                    )
+
+        total_minted = payout_ticks + curriculum_bonus_total
+        entries.insert(0, EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-total_minted, entry_type="mint"))
 
         post_access_txn(
             event_type="trivia_correct_reward",
@@ -298,30 +431,31 @@ def trivia_answer():
             context_type="trivia_answer",
             context_id=str(ans.id),
             memo_json={
-                "base_ticks": base_ticks,
-                "mult": mult,
                 "payout_ticks": payout_ticks,
-                "lesson_block_id": block.id
+                "curriculum_bonus_total": curriculum_bonus_total,
+                "num_curs_paid": len(associated_curs)
             },
-            entries=[
-                EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-payout_ticks, entry_type="mint"),
-                EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
-            ],
+            entries=entries,
         )
 
     db.session.commit()
 
-
-    # Normal correctness feedback
+    # 4. Flash Feedback (Confetti Trigger)
     if is_correct:
         flash("Correct!", "success")
         if payout_ticks > 0:
-            # special category format: "reward:<ticks>"
+            # The category format "reward:NUMBER" triggers the celebration animation
             flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
     else:
         flash("Nope.", "error")
 
     return redirect(url_for("appui.trivia_page", subject=subject_code or "", q=search_text or ""))
+
+
+
+
+
+
 
 
 @bp.post("/trivia/bad")

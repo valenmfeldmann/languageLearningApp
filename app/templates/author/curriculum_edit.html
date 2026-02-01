@@ -27,10 +27,17 @@
   </style>
 
   <div style="display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px;">
+
+
+    <button type="button"
+              onclick="window.location.href='{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}'">
+        &larr; Back to curriculum view
+    </button>
+
     <h1 style="margin:0;">Edit curriculum: {{ curriculum.title }}</h1>
 
     <div style="display:flex; gap:12px; align-items:center;">
-      <a href="{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}" style="font-size: 14px;">View</a>
+<!--      <a href="{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}" style="font-size: 14px;">View</a>-->
 
       {% if curriculum.is_archived %}
         <span style="padding:4px 10px; border-radius:999px; background:#333; font-size:13px;">Archived</span>

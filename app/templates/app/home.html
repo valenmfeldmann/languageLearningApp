@@ -73,171 +73,425 @@
   }
 </style>
 
-<div style="display:flex; align-items: baseline; gap: 12px;">
-  <h1 style="margin:0;">Explore</h1>
-  <a href="{{ url_for('main.curriculum_index') }}" style="font-size: 14px; opacity: 0.85;">All curriculums (list view)</a>
-</div>
-
-{% if continue_lesson %}
-  <p style="margin-top: 10px;">
-    <a class="btn btn-primary"
-       href="{{ url_for('main.lesson_page', lesson_code=continue_lesson.code, src='home') }}">
-      Continue {{ continue_lesson.title }}
-    </a>
-  </p>
-{% endif %}
-
-<form class="explore-top" method="GET" action="{{ url_for('main.app_home') }}"
-      style="display:flex; gap:10px; align-items:center; flex-wrap:wrap; margin: 14px 0 14px 0;">
-
-  <label style="display:flex; align-items:center; gap:8px; opacity:0.9; font-size:13px;">
-    <input type="checkbox" name="starred" value="1"
-           {% if request.args.get('starred') %}checked{% endif %}
-           onchange="this.form.submit()">
-    Starred
-  </label>
 
 
-  <!-- Search (dominant) -->
-  <div style="display:flex; gap:8px; align-items:center; flex: 1; min-width: 280px;">
-    <input type="text" name="q" value="{{ q or '' }}" placeholder="Search curriculums…"
-           style="flex:1; padding:10px 12px; border-radius:999px;
-                  border:1px solid rgba(255,255,255,0.18);
-                  background: rgba(255,255,255,0.04); color: inherit;">
-    <button type="submit"
-            style="padding:10px 14px; border-radius:999px; font-weight:700;">
-      Search
-    </button>
-  </div>
 
-  <!-- Quick sort (always visible) -->
-  <select name="sort"
-          style="padding:9px 10px; border-radius:999px;
-                 border:1px solid rgba(255,255,255,0.18);
-                 background: rgba(255,255,255,0.04); color: inherit;">
-    <option value="new" {% if sort == 'new' %}selected{% endif %}>Newest</option>
-    <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market cap</option>
-    <option value="title" {% if sort == 'title' %}selected{% endif %}>Title</option>
-  </select>
 
-  <!-- Filters toggle (collapses the bulky stuff) -->
-  <button type="button" id="toggleFilters"
-          style="padding:9px 12px; border-radius:999px; font-weight:700;">
-    Filters
-  </button>
 
-  <!-- Collapsible filters -->
-  <div id="filtersPanel"
-       style="display:none; width:100%; gap:10px; align-items:center; flex-wrap:wrap; margin-top:8px;">
-    <select name="subject"
-            style="padding:9px 10px; border-radius:999px;
-                   border:1px solid rgba(255,255,255,0.18);
-                   background: rgba(255,255,255,0.04); color: inherit;">
-      <option value="">All subjects</option>
-      {% for s in subjects %}
-        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
-          {{ s.name }}
-        </option>
-      {% endfor %}
-    </select>
 
-    <select name="school"
-            style="padding:9px 10px; border-radius:999px;
-                   border:1px solid rgba(255,255,255,0.18);
-                   background: rgba(255,255,255,0.04); color: inherit;">
-      <option value="">All schools</option>
-      {% for sc in schools %}
-        <option value="{{ sc }}" {% if school_code == sc %}selected{% endif %}>
-          {{ sc }}
-        </option>
-      {% endfor %}
-    </select>
 
-    <!-- optional: quick clear -->
-    <a href="{{ url_for('main.app_home') }}"
-       style="opacity:0.8; font-size:13px; text-decoration:none;">
-      Clear
-    </a>
-  </div>
-</form>
+<style>
+  .discovery-section-ultra {
+    background: rgba(255, 255, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.06);
+    border-radius: 12px;
+    padding: 10px 16px;
+    margin-bottom: 20px;
+    box-shadow: 0 2px 8px rgba(0,0,0,0.2);
+  }
 
-<div class="explore-grid">
-  {% for row in cards %}
-    {% set cur = row.curriculum %}
+  .header-flex {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+  }
 
-    <div class="card" style="position:relative;">
+  /* The main toolbar row */
+  .toolbar-row {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-wrap: wrap; /* Allows the entire toolbar to wrap on small screens */
+  }
 
-      <!-- Star overlay (NOT inside the link) -->
-      <div style="position:absolute; top:8px; right:8px; z-index:5;">
-        {% if row.is_starred %}
-          <form method="POST"
-                action="{{ url_for('main.curriculum_unstar', curriculum_id=cur.id) }}">
-            <button type="submit" title="Unstar"
-                    style="border:none; border-radius:999px;
-                           padding:6px 10px; cursor:pointer;">
-              ★
-            </button>
-          </form>
-        {% else %}
-          <form method="POST"
-                action="{{ url_for('main.curriculum_star', curriculum_id=cur.id) }}">
-            <button type="submit" title="Star"
-                    style="border:none; border-radius:999px;
-                           padding:6px 10px; cursor:pointer; opacity:0.85;">
-              ☆
-            </button>
-          </form>
-        {% endif %}
-      </div>
+  .search-group-slim {
+    flex: 1;
+    min-width: 200px;
+    display: flex;
+    background: rgba(0, 0, 0, 0.3);
+    border: 1px solid rgba(255, 255, 255, 0.1);
+    border-radius: 6px;
+    overflow: hidden;
+  }
 
-      <!-- Clickable card content -->
-      <a href="{{ url_for('main.curriculum_view', curriculum_code=cur.code) }}"
-         style="display:block; text-decoration:none; color:inherit;">
+  .search-group-slim input {
+    background: transparent;
+    border: none;
+    color: var(--text);
+    padding: 6px 12px;
+    width: 100%;
+    outline: none;
+    font-size: 0.85rem;
+  }
 
-        <div class="thumb">
-          {% if cur.cover_image_url %}
-            <img src="{{ cur.cover_image_url }}" alt="{{ cur.title }}">
-          {% else %}
-            <div style="height:100%; display:flex; align-items:center;
-                        justify-content:center; opacity:0.6;">
-              No cover
-            </div>
-          {% endif %}
-        </div>
+  /* Grouping Sort + Filters so they never split */
+  .action-group {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    flex-shrink: 0;
+  }
 
-        <div class="meta">
-          <div class="title">{{ cur.title }}</div>
+  .control-pill {
+    background: rgba(255, 255, 255, 0.05);
+    border: 1px solid rgba(255, 255, 255, 0.12);
+    color: var(--text);
+    padding: 0 10px;
+    border-radius: 6px;
+    font-size: 0.8rem;
+    cursor: pointer;
+    white-space: nowrap;
+    height: 32px;
+    display: flex;
+    align-items: center;
+  }
 
-          <div class="sub">
-            {% if cur.school_code %}
-              <span>{{ school_name_by_code.get(cur.school_code, cur.school_code) }}</span>
-            {% endif %}
-            {% if cur.subject_code %}
-              <span>• {{ subject_name_by_code.get(cur.subject_code, cur.subject_code) }}</span>
-            {% endif %}
-          </div>
+  .btn-search {
+    background: var(--link);
+    color: #000;
+    border: none;
+    padding: 0 14px;
+    font-weight: 800;
+    font-size: 0.8rem;
+    cursor: pointer;
+    height: 32px;
+  }
 
-          <div class="stats">
-            <span>{{ row.lesson_count }} lessons</span>
-            <span>• {{ row.attempt_count }} attempts</span>
-            <span>• {{ "%.2f"|format(row.market_cap_an) }} AN</span>
-          </div>
-        </div>
-      </a>
+  .filter-panel-slim {
+    display: none;
+    width: 100%;
+    gap: 8px;
+    margin-top: 8px;
+    padding-top: 8px;
+    border-top: 1px solid rgba(255, 255, 255, 0.05);
+  }
+</style>
 
+<div class="discovery-section-ultra">
+  <div class="header-flex">
+    <div style="display: flex; align-items: baseline; gap: 8px;">
+      <h2 style="margin:0; font-size: 1.2rem; font-weight: 800; letter-spacing: -0.5px;">Explore</h2>
+      <a href="{{ url_for('main.curriculum_index') }}" class="muted" style="font-size: 11px; text-decoration: none;">List View</a>
     </div>
-  {% endfor %}
+
+    {% if continue_lesson %}
+      <a href="{{ url_for('main.lesson_page', lesson_code=continue_lesson.code, src='home') }}"
+         class="control-pill" style="border-color: rgba(168, 199, 255, 0.3); text-decoration: none !important;">
+        <span style="color: var(--link); font-weight: 700;">🚀 Resume: {{ continue_lesson.title }}</span>
+      </a>
+    {% endif %}
+  </div>
+
+  <form method="GET" action="{{ url_for('main.app_home') }}" class="toolbar-row">
+
+    <label style="display:flex; align-items:center; gap:6px; font-size:12px; opacity:0.8; cursor: pointer; user-select: none;">
+      <input type="checkbox" name="starred" value="1"
+             {% if request.args.get('starred') %}checked{% endif %}
+             onchange="this.form.submit()"
+             style="accent-color: var(--link);">
+      Starred
+    </label>
+
+    <div class="search-group-slim">
+      <input type="text" name="q" value="{{ q or '' }}" placeholder="Search...">
+      <button type="submit" class="btn-search">Search</button>
+    </div>
+
+    <div class="action-group">
+      <select name="sort" class="control-pill" onchange="this.form.submit()">
+        <option value="new" {% if sort == 'new' %}selected{% endif %}>Newest First</option>
+        <option value="market_cap" {% if sort == 'market_cap' %}selected{% endif %}>Market Cap</option>
+        <option value="title" {% if sort == 'title' %}selected{% endif %}>A-Z</option>
+      </select>
+
+      <button type="button" id="toggleFilters" class="control-pill" style="font-weight: 700;">
+        ⚙️ Filters
+      </button>
+    </div>
+
+    <div id="filtersPanel" class="filter-panel-slim">
+        <select name="subject" class="control-pill">
+          <option value="">All Subjects</option>
+          {% for s in subjects %}<option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>{{ s.name }}</option>{% endfor %}
+        </select>
+        <select name="school" class="control-pill">
+          <option value="">All Schools</option>
+          {% for sc in schools %}<option value="{{ sc }}" {% if school_code == sc %}selected{% endif %}>{{ sc }}</option>{% endfor %}
+        </select>
+        <a href="{{ url_for('main.app_home') }}" class="muted" style="font-size: 11px; margin-left: auto; text-decoration: none;">Reset All</a>
+    </div>
+  </form>
 </div>
+
+
+
+
+
+
+
+
+
+
+
+
+
+  <style>
+    .explore-grid {
+      display: grid;
+      grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
+      gap: 20px;
+      margin-top: 20px;
+    }
+
+    .curriculum-card {
+      position: relative;
+      background: var(--card);
+      border: 1px solid rgba(255, 255, 255, 0.05);
+      border-radius: 12px;
+      overflow: hidden;
+      transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+      display: flex;
+      flex-direction: column;
+      height: 100%; /* Ensures all cards in a row stay equal height */
+    }
+
+    .curriculum-card:hover {
+      transform: translateY(-8px);
+      border-color: var(--link);
+      box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+      z-index: 20; /* Ensure the expanding title stays on top */
+    }
+
+    /* 1. More space for the image */
+    .card-thumb {
+      height: 200px; /* Increased from 160px */
+      background: #000;
+      position: relative;
+      overflow: hidden;
+      flex-shrink: 0;
+    }
+
+    .card-thumb img {
+      width: 100%;
+      height: 100%;
+      object-fit: cover;
+      opacity: 0.75;
+      transition: transform 0.5s ease;
+    }
+
+    .curriculum-card:hover .card-thumb img {
+      transform: scale(1.1);
+      opacity: 1;
+    }
+
+    .card-body {
+      padding: 16px;
+      flex-grow: 1;
+      display: flex;
+      flex-direction: column;
+      background: linear-gradient(to bottom, transparent, rgba(0,0,0,0.4));
+    }
+
+    /* 2. Expanding Title Logic */
+    .card-title-container {
+      position: relative;
+      margin-bottom: 12px;
+      min-height: 1.4em; /* Prevents layout jump */
+    }
+
+    .card-title {
+      font-size: 1rem;
+      font-weight: 700;
+      color: var(--text);
+      line-height: 1.3;
+      /* Default: Single line with ellipsis */
+      display: -webkit-box;
+      -webkit-line-clamp: 1;
+      -webkit-box-orient: vertical;
+      overflow: hidden;
+      transition: all 0.3s ease;
+    }
+
+    /* Expand on hover */
+    .curriculum-card:hover .card-title {
+      -webkit-line-clamp: 5; /* Show up to 5 lines on hover */
+      background: var(--card);
+      position: relative;
+      padding-bottom: 4px;
+    }
+
+    .card-sub {
+      font-size: 0.75rem;
+      color: var(--link);
+      font-weight: 800;
+      text-transform: uppercase;
+      letter-spacing: 1px;
+      margin-bottom: 8px;
+      opacity: 0.8;
+    }
+
+    .card-stats {
+      margin-top: auto; /* Pushes stats to the bottom of the card body */
+      display: flex;
+      gap: 6px;
+    }
+
+    .stat-badge {
+      background: rgba(168, 199, 255, 0.05);
+      border: 1px solid rgba(168, 199, 255, 0.1);
+      padding: 3px 8px;
+      border-radius: 4px;
+      font-size: 0.7rem;
+      color: var(--muted);
+      white-space: nowrap;
+    }
+  </style>
+
+
+
+  <div class="explore-grid">
+    {% for row in cards %}
+      {% set cur = row.curriculum %}
+      <div class="curriculum-card">
+
+        <div style="position:absolute; top:12px; right:12px; z-index:10;">
+          <form method="POST" action="{{ url_for('main.curriculum_unstar' if row.is_starred else 'main.curriculum_star', curriculum_id=cur.id) }}">
+            <button type="submit" class="star-button"
+                    style="border-radius: 50%; width: 36px; height: 36px; display: flex; align-items: center; justify-content: center; cursor: pointer;">
+              {{ '★' if row.is_starred else '☆' }}
+            </button>
+          </form>
+        </div>
+
+        <a href="{{ url_for('main.curriculum_view', curriculum_code=cur.code) }}" style="text-decoration:none;">
+          <div class="card-thumb">
+            {% if cur.cover_image_url %}
+              <img src="{{ cur.cover_image_url }}" alt="{{ cur.title }}">
+            {% else %}
+              <div style="height:100%; display:flex; align-items:center; justify-content:center; background: linear-gradient(45deg, #0b0d12, #1a2333);">
+                <span style="font-size: 2rem; opacity: 0.2;">📚</span>
+              </div>
+            {% endif %}
+          </div>
+
+          <div class="card-body">
+            <div class="card-sub">
+              {{ school_name_by_code.get(cur.school_code, cur.school_code) or 'Public' }}
+              {% if cur.subject_code %} • {{ subject_name_by_code.get(cur.subject_code, cur.subject_code) }}{% endif %}
+            </div>
+
+            <div class="card-title">{{ cur.title }}</div>
+
+            <div class="card-stats">
+              <div class="stat-badge"><b>{{ row.lesson_count }}</b> Lessons</div>
+              <div class="stat-badge"><b>{{ row.attempt_count }}</b> Plays</div>
+              <div class="stat-badge" style="border-color: rgba(168, 199, 255, 0.3); color: var(--link);">
+                <b>{{ "%.1f"|format(row.market_cap_an) }}</b> AN
+              </div>
+            </div>
+          </div>
+        </a>
+      </div>
+    {% endfor %}
+  </div>
+
+
+
+
+
+
+<style>
+  .creator-studio-section {
+    margin-top: 40px;
+    padding: 30px;
+    background: rgba(168, 199, 255, 0.02);
+    border: 1px solid rgba(255, 255, 255, 0.05);
+    border-radius: 20px;
+  }
+
+  .creator-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+    gap: 16px;
+    margin-top: 20px;
+  }
+
+  .creator-card {
+    background: rgba(0, 0, 0, 0.2);
+    border: 1px solid rgba(255, 255, 255, 0.08);
+    padding: 20px;
+    border-radius: 12px;
+    text-decoration: none !important;
+    display: flex;
+    flex-direction: column;
+    gap: 8px;
+    transition: all 0.2s ease;
+  }
+
+  .creator-card:hover {
+    background: rgba(168, 199, 255, 0.05);
+    border-color: var(--link);
+    transform: translateY(-3px);
+  }
+
+  .creator-card .icon {
+    font-size: 1.5rem;
+    margin-bottom: 4px;
+  }
+
+  .creator-card .label {
+    font-weight: 700;
+    color: var(--text);
+  }
+
+  .creator-card .desc {
+    font-size: 0.8rem;
+    color: var(--muted);
+    line-height: 1.3;
+  }
+</style>
 
 {% if current_user.is_authenticated %}
-  <hr style="margin: 24px 0;">
-  <h3>Author</h3>
-  <ul>
-    <li><a href="{{ url_for('author.lesson_index') }}">My Lessons</a></li>
-    <li><a href="{{ url_for('author.curriculum_new_form') }}">New Curriculum</a></li>
-    <li><a href="{{ url_for('author.lesson_new_form') }}">New Lesson</a></li>
-  </ul>
+  <div class="creator-studio-section">
+    <div style="display: flex; align-items: center; gap: 10px;">
+      <h3 style="margin: 0; font-weight: 800; letter-spacing: -0.5px;">Creator Studio</h3>
+      <span class="muted" style="font-size: 0.8rem;">Build and manage your content</span>
+    </div>
+
+    <div class="creator-grid">
+      <a href="{{ url_for('author.lesson_index') }}" class="creator-card">
+        <span class="icon">📁</span>
+        <span class="label">My Content</span>
+        <span class="desc">Manage your existing lessons and curriculums.</span>
+      </a>
+
+      <a href="{{ url_for('author.curriculum_new_form') }}" class="creator-card">
+        <span class="icon">📚</span>
+        <span class="label">New Curriculum</span>
+        <span class="desc">Bundle lessons into a structured learning path.</span>
+      </a>
+
+      <a href="{{ url_for('author.lesson_new_form') }}" class="creator-card">
+        <span class="icon">📝</span>
+        <span class="label">New Lesson</span>
+        <span class="desc">Create interactive content with quizzes and assets.</span>
+      </a>
+    </div>
+  </div>
 {% endif %}
+
+
+
+<!--{% if current_user.is_authenticated %}-->
+<!--  <hr style="margin: 24px 0;">-->
+<!--  <h3>Author</h3>-->
+<!--  <ul>-->
+<!--    <li><a href="{{ url_for('author.lesson_index') }}">My Lessons</a></li>-->
+<!--    <li><a href="{{ url_for('author.curriculum_new_form') }}">New Curriculum</a></li>-->
+<!--    <li><a href="{{ url_for('author.lesson_new_form') }}">New Lesson</a></li>-->
+<!--  </ul>-->
+<!--{% endif %}-->
 
 
 <script>

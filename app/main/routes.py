@@ -61,6 +61,10 @@ A = 15  # minutes to reach half saturation
 bp = Blueprint("main", __name__)
 
 
+
+
+
+
 @bp.post("/app/lesson/<lesson_code>/complete")
 @login_required
 def complete_lesson(lesson_code: str):
@@ -72,7 +76,13 @@ def complete_lesson(lesson_code: str):
     if not attempt_id:
         abort(400)
 
-    from app.models import LessonAttempt, LessonCompletion, LessonBlockProgress  # adjust import path
+    rating_score = request.form.get("rating")
+    if not rating_score:
+        flash("Please provide a rating before completing.", "error")
+        return redirect(url_for("main.lesson_page", lesson_code=lesson_code))
+
+
+    from app.models import LessonAttempt, LessonCompletion, LessonBlockProgress, LessonRating  # adjust import path
 
     attempt = LessonAttempt.query.filter_by(
         id=attempt_id,
@@ -103,6 +113,21 @@ def complete_lesson(lesson_code: str):
             # return jsonify({"ok": False, "error": "not_ready"}), 400
             flash("Complete all quizzes to finish this lesson.", "error")
             return redirect(url_for("main.lesson_page", lesson_code=lesson_code))
+
+
+
+
+
+    # Record the rating
+    from app.models import LessonRating
+    rating = LessonRating(
+        user_id=current_user.id,
+        lesson_id=lesson.id,
+        attempt_id=attempt.id,
+        score=int(rating_score)
+    )
+    db.session.add(rating)
+
 
     # analytics: attempt completed (fires once because we return early if already completed)
     log_event(
@@ -209,6 +234,13 @@ def complete_lesson(lesson_code: str):
             ))
 
     return redirect(url_for("main.lesson_page", lesson_code=lesson_code))
+
+
+
+
+
+
+
 
 
 @bp.get("/billing_status")

@@ -69,18 +69,47 @@
     </div>
   {% endfor %}
 
-  <div class="lesson-footer">
+
+
+
+
+
+  <div class="lesson-footer" style="margin-top: 50px; padding-top: 30px; border-top: 1px solid var(--border);">
     {% if can_complete %}
       <form class="lessons-filters" method="POST" action="{{ url_for('main.complete_lesson', lesson_code=lesson.code) }}">
         <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
-        <button type="submit" class="btn-complete">✓ Complete Lesson</button>
+
+        <div style="margin-bottom: 25px; text-align: center;">
+          <h3 style="margin-bottom: 15px;">How was this lesson?</h3>
+          <div class="rating-stars" style="display: flex; justify-content: center; gap: 15px; flex-direction: row-reverse;">
+            {% for i in range(5, 0, -1) %}
+              <input type="radio" name="rating" value="{{ i }}" id="star{{ i }}" required style="display:none;">
+              <label for="star{{ i }}" style="font-size: 30px; cursor: pointer; color: #444; transition: color 0.2s;">★</label>
+            {% endfor %}
+          </div>
+          <p class="muted" style="margin-top: 10px; font-size: 13px;">Please select a rating to finish.</p>
+        </div>
+
+        <button type="submit" class="btn-complete" style="width: 100%;">✓ Complete Lesson</button>
       </form>
     {% else %}
-      <div class="status-note">
-        Complete all quizzes above to finish this lesson.
-      </div>
+      <div class="status-note">Complete all quizzes above to finish this lesson.</div>
     {% endif %}
   </div>
+
+  <style>
+    /* Hover effect for star rating */
+    .rating-stars label:hover,
+    .rating-stars label:hover ~ label,
+    .rating-stars input:checked ~ label {
+      color: var(--link) !important;
+    }
+  </style>
+
+
+
+
+
 
 </div>
 {% endblock %}

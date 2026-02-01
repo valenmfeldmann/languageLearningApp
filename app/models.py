@@ -110,6 +110,20 @@ class Lesson(db.Model):
 
 
 
+class LessonRating(db.Model):
+    __tablename__ = "lesson_rating"
+
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey("user.id", ondelete="CASCADE"), nullable=False, index=True)
+    lesson_id = db.Column(db.String, db.ForeignKey("lesson.id", ondelete="CASCADE"), nullable=False, index=True)
+    attempt_id = db.Column(db.String, db.ForeignKey("lesson_attempt.id", ondelete="CASCADE"), nullable=False, unique=True, index=True)
+
+    # 1 to 5 stars
+    score = db.Column(db.Integer, nullable=False)
+    # Optional comment
+    comment = db.Column(db.Text, nullable=True)
+
+    created_at = db.Column(db.DateTime, default=datetime.utcnow, nullable=False)
 
 
 class LessonCompletion(db.Model):

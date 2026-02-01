@@ -49,7 +49,7 @@ from app.extensions import db
 from app.models import Curriculum, UserCurriculumStar
 import os
 from flask import current_app
-
+import sqlalchemy as sa
 
 
 
@@ -837,6 +837,47 @@ def curriculum_view(curriculum_code: str):
         for L in Lesson.query.filter(Lesson.id.in_(lesson_ids)).all():
             lessons[L.id] = L
 
+
+
+    # --- Quality Metrics Logic ---
+    from sqlalchemy import func
+    from app.models import LessonRating
+
+    # 1. Get the ID of the LATEST rating per unique user per lesson
+    latest_rating_ids = (
+        db.session.query(func.max(LessonRating.id))
+        .filter(LessonRating.lesson_id.in_(lesson_ids))
+        .group_by(LessonRating.user_id, LessonRating.lesson_id)
+        .subquery()
+    )
+
+    # 2. Aggregate the metrics using only those unique IDs
+    rating_stats = (
+        db.session.query(
+            LessonRating.lesson_id,
+            func.count(LessonRating.id).label("num_ratings"),
+            func.avg(LessonRating.score).label("avg_score"),
+            func.sum(LessonRating.score).label("sum_score")
+        )
+        .filter(LessonRating.id.in_(sa.select(latest_rating_ids)))
+        .group_by(LessonRating.lesson_id)
+        .all()
+    )
+
+    # 3. Create a lookup map for the display loop
+    stats_map = {}
+    for row in rating_stats:
+        num = int(row.num_ratings)
+        stats_map[row.lesson_id] = {
+            "count": num,
+            "avg": float(row.avg_score),
+            # Bayesian Estimated Quality Score: (Sum + 5 + 0) / (Count + 2)
+            "quality": (float(row.sum_score) + 5 + 0) / (num + 2)
+        }
+
+
+
+
     for it in items:
         if it.item_type == "phase":
             display.append({"kind": "phase", "title": it.phase_title or "Phase"})
@@ -846,12 +887,19 @@ def curriculum_view(curriculum_code: str):
             seen[it.lesson_id] += 1
             n_completed = completion_count.get(it.lesson_id, 0)
             is_done = seen[it.lesson_id] <= n_completed
+
+            # Fetch the stats for this specific lesson
+            ls_stats = stats_map.get(it.lesson_id, {"count": 0, "avg": 0, "quality": None})
+
             display.append({
                 "kind": "lesson",
                 "lesson": lessons.get(it.lesson_id),
                 "is_done": is_done,
                 "occurrence": seen[it.lesson_id],
                 "note": it.note,
+                "rating_avg": ls_stats["avg"],
+                "rating_count": ls_stats["count"],
+                "quality_score": ls_stats["quality"]
             })
             continue
 

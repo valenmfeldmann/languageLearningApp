@@ -12,3 +12,10 @@ class Config:
 
     # One-time signup bonus (in ticks). 10 AN = 10000 ticks.
     SIGNUP_BONUS_TICKS = int(os.getenv("SIGNUP_BONUS_TICKS", "10000"))
+
+
+    # FIX: Define these as attributes of the class
+    # Use Lax for local Docker dev to allow the redirect cookie to be sent
+    SESSION_COOKIE_SAMESITE = 'Lax'
+    # Must be False if you are using http://localhost instead of https://
+    SESSION_COOKIE_SECURE = False

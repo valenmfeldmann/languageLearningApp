@@ -24,13 +24,18 @@ from app.billing.access import has_access
 
 
 
-
 @login_manager.user_loader
 def load_user(user_id):
     return User.query.get(user_id)
 
 def create_app():
     app = Flask(__name__)
+
+    # FIX: Tell Oauthlib that it is okay to use HTTP for local dev
+    import os
+    if os.environ.get('FLASK_ENV') == 'development':
+        os.environ['OAUTHLIB_INSECURE_TRANSPORT'] = '1'
+
     app.config.from_object(Config)
 
 

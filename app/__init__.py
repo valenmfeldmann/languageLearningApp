@@ -165,7 +165,11 @@ def create_app():
             except BuildError:
                 return None
 
+        # Check if subscriptions are required
+        sub_req = current_app.config.get("REQUIRE_SUBSCRIPTION", True)
+
         return {
+            "require_subscription": sub_req,  # Pass this to templates
             "nav_links": {
                 "author_lessons": safe_url("author.lesson_index"),
                 "new_lesson": safe_url("author.lesson_new_form"),
@@ -195,6 +199,10 @@ def create_app():
 
     @app.before_request
     def require_subscription_everywhere():
+        # 1. Check the global toggle first
+        if not current_app.config.get("REQUIRE_SUBSCRIPTION", True):
+            return None
+
         # Always allow static files
         if request.endpoint == "static":
             return None

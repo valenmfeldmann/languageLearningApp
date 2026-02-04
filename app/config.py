@@ -13,6 +13,8 @@ class Config:
     # One-time signup bonus (in ticks). 10 AN = 10000 ticks.
     SIGNUP_BONUS_TICKS = int(os.getenv("SIGNUP_BONUS_TICKS", "10000"))
 
+    # New Global Toggle: Set to False to disable subscription requirements
+    REQUIRE_SUBSCRIPTION = os.getenv("REQUIRE_SUBSCRIPTION", "True") == "True"
 
     # FIX: Define these as attributes of the class
     # Use Lax for local Docker dev to allow the redirect cookie to be sent

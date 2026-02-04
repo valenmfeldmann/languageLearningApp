@@ -756,7 +756,9 @@
 
         <span style="opacity:.35; padding:0 6px;">|</span>
 
-        <a class="navlink" href="{{ url_for('billing.pricing') }}">Pricing</a>
+        {% if require_subscription %}
+          <a class="navlink" href="{{ url_for('billing.pricing') }}">Pricing</a>
+        {% endif %}
         {% if current_user.is_authenticated %}
           <a class="navlink" href="{{ url_for('billing.portal') }}">Manage</a>
         {% endif %}

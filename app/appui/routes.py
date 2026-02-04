@@ -313,6 +313,13 @@ def trivia_answer():
 
     db.session.commit()
 
+    # Detect AJAX request
+    if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+        return jsonify({
+            "is_correct": bool(is_correct),
+            "payout": payout_ticks
+        })
+
     # flash(("Correct! " if is_correct else "Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""), "success" if is_correct else "error")
     return redirect(url_for("appui.trivia_page"))
 

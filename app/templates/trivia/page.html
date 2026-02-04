@@ -90,74 +90,125 @@
     </button>
   </form>
 
-  {% if not block %}
-    <p>No trivia question available.</p>
-  {% else %}
-    <div style="
-      border: 1px solid rgba(255,255,255,0.15);
-      border-radius: 16px;
-      padding: 24px;
-      background: rgba(0,0,0,0.45);
-      box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-    ">
-
-      <!-- Source / metadata -->
+  <div id="trivia-card-container">
+    {% if not block %}
+      <p>No trivia question available.</p>
+    {% else %}
       <div style="
-        opacity: 0.65;
-        font-size: 13px;
-        margin-bottom: 14px;
+        border: 1px solid rgba(255,255,255,0.15);
+        border-radius: 16px;
+        padding: 24px;
+        background: rgba(0,0,0,0.45);
+        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
       ">
-        Source: <b>{{ lesson.title }}</b> ({{ lesson.code }})
-        {% if lesson.subject_code %} — {{ lesson.subject_code }}{% endif %}
-      </div>
 
-      <!-- PROMPT -->
-      <div style="
-        font-size: 22px;
-        line-height: 1.4;
-        font-weight: 500;
-        color: #ffffff;
-        margin-bottom: 20px;
-      ">
-        {% set prompt_val = block.payload_json.get("prompt", "") %}
-        {{ render_typed(prompt_val, lesson.id) }}
-      </div>
-
-      <!-- ANSWERS -->
-      <form method="post" action="{{ url_for('appui.trivia_answer') }}">
-        <input type="hidden" name="block_id" value="{{ block.id }}">
-        <input type="hidden" name="subject" value="{{ subject_code or '' }}">
-        <input type="hidden" name="q" value="{{ q or '' }}">
-
-        {% for c in block.payload_json.get("choices", []) %}
-          <button class="choice-btn"
-                  name="choice_index"
-                  value="{{ loop.index0 }}">
-            {{ render_typed(c, lesson.id) }}
-          </button>
-        {% endfor %}
-      </form>
-
-      <!-- BAD QUESTION -->
-      <form method="post" action="{{ url_for('appui.trivia_bad_vote') }}" style="margin-top: 14px;">
-        <input type="hidden" name="block_id" value="{{ block.id }}">
-        <input type="hidden" name="subject" value="{{ subject_code or '' }}">
-        <input type="hidden" name="q" value="{{ q or '' }}">
-
-        <button style="
-          padding: 8px 12px;
-          border-radius: 10px;
-          border: 1px solid #a44;
-          background: rgba(120,20,20,0.15);
-          color: #ffb3b3;
+        <!-- Source / metadata -->
+        <div style="
+          opacity: 0.65;
           font-size: 13px;
-          cursor: pointer;
+          margin-bottom: 14px;
         ">
-          Vote: bad question
-        </button>
-      </form>
-    </div>
-  {% endif %}
+          Source: <b>{{ lesson.title }}</b> ({{ lesson.code }})
+          {% if lesson.subject_code %} — {{ lesson.subject_code }}{% endif %}
+        </div>
+
+        <!-- PROMPT -->
+        <div style="
+          font-size: 22px;
+          line-height: 1.4;
+          font-weight: 500;
+          color: #ffffff;
+          margin-bottom: 20px;
+        ">
+          {% set prompt_val = block.payload_json.get("prompt", "") %}
+          {{ render_typed(prompt_val, lesson.id) }}
+        </div>
+
+        <!-- ANSWERS -->
+        <form method="post" action="{{ url_for('appui.trivia_answer') }}">
+          <input type="hidden" name="block_id" value="{{ block.id }}">
+          <input type="hidden" name="subject" value="{{ subject_code or '' }}">
+          <input type="hidden" name="q" value="{{ q or '' }}">
+
+          {% for c in block.payload_json.get("choices", []) %}
+            <button class="choice-btn"
+                    name="choice_index"
+                    value="{{ loop.index0 }}">
+              {{ render_typed(c, lesson.id) }}
+            </button>
+          {% endfor %}
+        </form>
+
+        <!-- BAD QUESTION -->
+        <form method="post" action="{{ url_for('appui.trivia_bad_vote') }}" style="margin-top: 14px;">
+          <input type="hidden" name="block_id" value="{{ block.id }}">
+          <input type="hidden" name="subject" value="{{ subject_code or '' }}">
+          <input type="hidden" name="q" value="{{ q or '' }}">
+
+          <button style="
+            padding: 8px 12px;
+            border-radius: 10px;
+            border: 1px solid #a44;
+            background: rgba(120,20,20,0.15);
+            color: #ffb3b3;
+            font-size: 13px;
+            cursor: pointer;
+          ">
+            Vote: bad question
+          </button>
+        </form>
+      </div>
+    {% endif %}
+  </div>
+
+  <script>
+    document.addEventListener('click', async (e) => {
+      // 1. Intercept the choice button click
+      const btn = e.target.closest('.choice-btn');
+      if (!btn) return;
+
+      e.preventDefault();
+      const form = btn.closest('form');
+      const formData = new FormData(form);
+      formData.append('choice_index', btn.value); // Add the specific button's value
+
+      try {
+        // 2. Submit answer via AJAX
+        const response = await fetch(form.action, {
+          method: 'POST',
+          body: formData,
+          headers: { 'X-Requested-With': 'XMLHttpRequest' }
+        });
+
+        const result = await response.json();
+
+        // 3. Immediate Reward Celebration
+        if (result.is_correct && typeof rewardFX === 'function') {
+          rewardFX(result.payout);
+        }
+
+        // 4. Fetch only the next question's HTML
+        // We fetch the current URL (which has our filters)
+        const nextResponse = await fetch(window.location.href);
+        const nextHtml = await nextResponse.text();
+
+        // 5. Swap only the card content
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(nextHtml, 'text/html');
+        const newCard = doc.getElementById('trivia-card-container');
+
+        if (newCard) {
+          document.getElementById('trivia-card-container').innerHTML = newCard.innerHTML;
+        }
+
+      } catch (err) {
+        console.error("Trivia update failed:", err);
+        // Fallback: if AJAX fails, just do a real reload
+        form.submit();
+      }
+    });
+    </script>
+
 </div>
 
 {% endblock %}

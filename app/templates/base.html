@@ -855,12 +855,12 @@
       const isMobile = window.innerWidth < 768;
       const T_REF = 40;
 
-      // Chaining: Larger chunks on mobile reduce the number of DOM operations
-      const CAP_TICKS_PER_BURST = isMobile ? 80 : 30;
+      // Chaining: Larger chunks on mobile reduce the number of DOM operations (I'll test with lower chunks)
+      const CAP_TICKS_PER_BURST = isMobile ? 15 : 30;
 
       // Scaling: We use fewer particles on mobile but make them larger (BASE_SIZE)
       const PARTICLES_PER_TICK = isMobile ? 6 : 30;
-      const MAX_PARTICLES_PER_BURST = isMobile ? 250 : 1000;
+      const MAX_PARTICLES_PER_BURST = isMobile ? 100 : 1000;
 
       // Optional within-burst "extra" pop
       const EXTRA_BURST_MIN_TICKS = 80;

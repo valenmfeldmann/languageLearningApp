@@ -2063,130 +2063,59 @@ def lessons_continue():
 
 
 
-@bp.get("/app/trivia")
-@login_required
-def trivia_page():
-    # if current_app.config.get("REQUIRE_SUBSCRIPTION", True) and not has_access(current_user):
-    #     return redirect(url_for("billing.pricing"))
-    if not has_access(current_user):
-        return redirect(url_for("billing.pricing"))
-
-    term = (request.args.get("q") or "").strip()
-
-    # Base: random quiz block
-    q = (
-        db.session.query(LessonBlock, Lesson)
-        .join(Lesson, Lesson.id == LessonBlock.lesson_id)
-        .filter(LessonBlock.type == "quiz_mcq")
-        # pick your discovery rule:
-        # .filter(Lesson.visibility == "public")
-    )
-
-    # "Subject" v1: just search lesson fields
-    if term:
-        like = f"%{term}%"
-        q = q.filter(
-            (Lesson.title.ilike(like)) |
-            (Lesson.description.ilike(like)) |
-            (Lesson.code.ilike(like))
-        )
-
-    row = q.order_by(func.random()).first()
-
-    if not row:
-        flash("No trivia questions found for that search.", "info")
-        return render_template("trivia/page.html", block=None, lesson=None, q=term)
-
-    block, lesson = row
-
-    log_event("trivia_question_served", "lesson_block", block.id, {
-        "lesson_id": lesson.id,
-        "lesson_code": lesson.code,
-        "q": term,
-    })
-    db.session.commit()
-
-    return render_template("trivia/page.html", block=block, lesson=lesson, q=term)
-
-
-@bp.post("/app/trivia/answer")
-@login_required
-def trivia_answer():
-    if not has_access(current_user):
-        return redirect(url_for("billing.pricing"))
-
-    block_id = (request.form.get("block_id") or "").strip()
-    choice_raw = request.form.get("choice_index")
-
-    if not block_id or choice_raw is None:
-        abort(400)
-
-    block = LessonBlock.query.filter_by(id=block_id, type="quiz_mcq").one_or_none()
-    if not block:
-        abort(404)
-
-    try:
-        choice_index = int(choice_raw)
-    except ValueError:
-        abort(400)
-
-    correct_index = int(block.payload_json.get("answer_index", -1))
-    is_correct = (choice_index == correct_index)
-
-    # log either way
-    log_event("trivia_answer_submitted", "lesson_block", block.id, {
-        "choice_index": choice_index,
-        "is_correct": bool(is_correct),
-    })
-
-    payout_ticks = 0
-    if is_correct:
-        # Pays at least 1 tick, plus Exp(mean=10 ticks)
-        extra = int(random.expovariate(1 / 10.0))  # expected ~10, can be 0
-        payout_ticks = 1 + max(0, extra)
-
-        today = datetime.utcnow().date().isoformat()
-        key = f"trivia_reward:{current_user.id}:{block.id}:{today}"
-
-        issuer = get_or_create_system_account("rewards_pool")
-        user_wallet = get_or_create_user_wallet(current_user.id)
-        an = get_an_asset()
-
-        post_access_txn(
-            event_type="trivia_correct_reward",
-            idempotency_key=key,
-            actor_user_id=current_user.id,
-            context_type="lesson_block",
-            context_id=block.id,
-            memo_json={"payout_ticks": payout_ticks},
-            entries=[
-                EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-payout_ticks, entry_type="mint"),
-                EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
-            ],
-        )
-
-    db.session.commit()
-
-    flash(("Correct! " if is_correct else "Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""), "success" if is_correct else "error")
-    return redirect(url_for("main.trivia_page"))
+# @bp.get("/app/trivia")
+# @login_required
+# def trivia_page():
+#     # if current_app.config.get("REQUIRE_SUBSCRIPTION", True) and not has_access(current_user):
+#     #     return redirect(url_for("billing.pricing"))
+#     if not has_access(current_user):
+#         return redirect(url_for("billing.pricing"))
+#
+#     term = (request.args.get("q") or "").strip()
+#
+#     # Updated query: Join through CurriculumItem to Curriculum
+#     q = (
+#         db.session.query(LessonBlock, Lesson)
+#         .join(Lesson, Lesson.id == LessonBlock.lesson_id)
+#         .join(CurriculumItem, CurriculumItem.lesson_id == Lesson.id)
+#         .join(Curriculum, Curriculum.id == CurriculumItem.curriculum_id)
+#         .filter(
+#             LessonBlock.type == "quiz_mcq",
+#             Curriculum.is_public == True  # Only show from public curriculums
+#         )
+#     )
+#
+#
+#
+#     # "Subject" v1: just search lesson fields
+#     if term:
+#         like = f"%{term}%"
+#         q = q.filter(
+#             (Lesson.title.ilike(like)) |
+#             (Lesson.description.ilike(like)) |
+#             (Lesson.code.ilike(like))
+#         )
+#
+#     row = q.order_by(func.random()).first()
+#
+#     if not row:
+#         flash("No trivia questions found for that search.", "info")
+#         return render_template("trivia/page.html", block=None, lesson=None, q=term)
+#
+#     block, lesson = row
+#
+#     log_event("trivia_question_served", "lesson_block", block.id, {
+#         "lesson_id": lesson.id,
+#         "lesson_code": lesson.code,
+#         "q": term,
+#     })
+#     db.session.commit()
+#
+#     return render_template("trivia/page.html", block=block, lesson=lesson, q=term)
 
 
-@bp.post("/app/trivia/bad")
-@login_required
-def trivia_bad_vote():
-    if not has_access(current_user):
-        return redirect(url_for("billing.pricing"))
 
-    block_id = (request.form.get("block_id") or "").strip()
-    if not block_id:
-        abort(400)
 
-    # Phase 1: store as an analytics event (no schema)
-    log_event("trivia_bad_question_voted", "lesson_block", block_id, {})
-    db.session.commit()
-
-    flash("Logged. Thank you for protecting the public from cursed trivia.", "info")
-    return redirect(url_for("main.trivia_page"))
 
 
 

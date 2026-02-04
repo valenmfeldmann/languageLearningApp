@@ -852,33 +852,34 @@
       // =========================
       // Tunable parameters (TOP)
       // =========================
+      const isMobile = window.innerWidth < 768;
       const T_REF = 40;
 
-      // Wrap cap (ticks). 1000 ticks and cap 500 => 2 chained bursts.
-      const CAP_TICKS_PER_BURST = 30;  // <-- set to 500 when done debugging
+      // Chaining: Larger chunks on mobile reduce the number of DOM operations
+      const CAP_TICKS_PER_BURST = isMobile ? 80 : 30;
 
-      // Scaling
-      const PARTICLES_PER_TICK = 30;
-      const MAX_PARTICLES_PER_BURST = 1000;
+      // Scaling: We use fewer particles on mobile but make them larger (BASE_SIZE)
+      const PARTICLES_PER_TICK = isMobile ? 6 : 30;
+      const MAX_PARTICLES_PER_BURST = isMobile ? 250 : 1000;
 
       // Optional within-burst "extra" pop
       const EXTRA_BURST_MIN_TICKS = 80;
       const EXTRA_BURST_TICK_FRACTION = 0.60;
       const EXTRA_BURST_DELAY_MS = 70;
 
-      // Geometry
-      const BASE_RADIUS = 220;
-      const RADIUS_PER_TICK = 12;
-      const BASE_RADIUS_2 = 180;
-      const RADIUS2_PER_TICK = 10;
+      // Geometry: Smaller radius for mobile viewports to keep effects on-screen
+      const BASE_RADIUS = isMobile ? 140 : 220;
+      const RADIUS_PER_TICK = isMobile ? 8 : 12;
+      const BASE_RADIUS_2 = isMobile ? 100 : 180;
+      const RADIUS2_PER_TICK = isMobile ? 6 : 10;
       const ARC_WIDTH_PI = Math.PI * 1.10;
 
-      // Particle size/glow
-      const BASE_SIZE = 3;
-      const SIZE_PER_TICK = 0.12;
-      const JITTER_BASE = 2;
+      // Particle size/glow: Larger particles on mobile compensate for lower counts
+      const BASE_SIZE = isMobile ? 6 : 3;
+      const SIZE_PER_TICK = isMobile ? 0.20 : 0.12;
+      const JITTER_BASE = isMobile ? 4 : 2;
       const JITTER_PER_TICK = 0.10;
-      const GLOW_BASE = 10;
+      const GLOW_BASE = isMobile ? 15 : 10;
       const GLOW_PER_TICK = 0.55;
 
       // Timing
@@ -886,19 +887,24 @@
       const JITTER_DELAY_MS = 120;
 
       // Wrapped burst chaining
-      const WRAP_START_SPACING_MS = 140;   // start-to-start
-      const MIN_TOTAL_MS = 850;            // ensures tiny wins still show
+      const WRAP_START_SPACING_MS = isMobile ? 200 : 140;
+      const MIN_TOTAL_MS = 850;
 
-      // Label timing (explicit)
+      // Label timing
       const LABEL_FADE_IN_MS = 120;
       const LABEL_EXIT_MS = 260;
       const LABEL_HOLD_PAD_MS = 160;
 
-      // Label look (scaled by total ticks)
-      const LABEL_BASE_FONT = 18;
+      // Label look
+      const LABEL_BASE_FONT = isMobile ? 22 : 18; // Slightly larger text for mobile
       const LABEL_FONT_PER_TICK = 0.35;
       const LABEL_BASE_SCALE = 0.92;
       const LABEL_SCALE_PER_TICK = 0.010;
+
+
+
+
+
 
       // Aura (constant reading shield — NOT payout-scaled)
       const AURA_SIZE_PX = 30;

@@ -306,6 +306,10 @@ from sqlalchemy import or_, case
 
 @bp.get("/app")
 def app_home():
+    # sub_required = current_app.config.get("REQUIRE_SUBSCRIPTION", True)
+    # if sub_required and not has_access(current_user):
+    #     return redirect(url_for("billing.pricing"))
+
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
 
@@ -2062,6 +2066,8 @@ def lessons_continue():
 @bp.get("/app/trivia")
 @login_required
 def trivia_page():
+    # if current_app.config.get("REQUIRE_SUBSCRIPTION", True) and not has_access(current_user):
+    #     return redirect(url_for("billing.pricing"))
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
 

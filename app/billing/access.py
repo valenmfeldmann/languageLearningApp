@@ -136,7 +136,20 @@ def _credits_allow_access(
     return False, "insufficient_credit_balance", debug
 
 
+# def has_access(user, at: Optional[datetime] = None) -> bool:
+#     return access_status(user, at=at).allowed
+
+
+from flask import current_app
+
+
 def has_access(user, at: Optional[datetime] = None) -> bool:
+    # 1. Check the global toggle first
+    # This prevents anyone from being blocked if the requirement is off
+    if not current_app.config.get("REQUIRE_SUBSCRIPTION", True):
+        return True
+
+    # 2. Fall back to the original subscription check logic
     return access_status(user, at=at).allowed
 
 

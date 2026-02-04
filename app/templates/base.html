@@ -759,9 +759,12 @@
         {% if require_subscription %}
           <a class="navlink" href="{{ url_for('billing.pricing') }}">Pricing</a>
         {% endif %}
-        {% if current_user.is_authenticated %}
-          <a class="navlink" href="{{ url_for('billing.portal') }}">Manage</a>
+        {% if require_subscription %}
+          {% if current_user.is_authenticated %}
+            <a class="navlink" href="{{ url_for('billing.portal') }}">Manage</a>
+          {% endif %}
         {% endif %}
+
 
 
         {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons) %}

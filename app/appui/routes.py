@@ -1,5 +1,5 @@
 # app/appui/routes.py
-from flask import render_template, url_for, abort, request
+from flask import render_template, url_for, abort, request, current_app
 from flask_login import login_required, current_user
 
 from . import bp  # 👈 THIS is the missing line
@@ -57,6 +57,9 @@ def require_paid_access_for_appui():
 @bp.get("/account")
 @login_required
 def account():
+    # 1. Fetch the global requirement setting
+    sub_required = current_app.config.get("REQUIRE_SUBSCRIPTION", True)
+
     sub = _get_subscription()
 
     buddy_count = int(getattr(current_user, "active_buddy_count", 0) or 0)
@@ -99,6 +102,7 @@ def account():
         sub=sub,
         plan=plan,
         has_access=has_access(current_user),
+        require_subscription=sub_required,  # Crucial for the template toggle
         buddy_count=buddy_count,
         multiplier=mult,
         credit_balance_cents=credit_balance_cents,

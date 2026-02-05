@@ -167,14 +167,12 @@
 
 {% block scripts %}
 <script>
-console.log("Trivia Script Loaded and Listening..."); // This PROVES the script is running
 
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.choice-btn');
   if (!btn) return;
 
   e.preventDefault();
-  console.log("Button clicked, sending answer...");
 
   const allBtns = document.querySelectorAll('.choice-btn');
   allBtns.forEach(b => b.style.pointerEvents = 'none');
@@ -192,7 +190,6 @@ document.addEventListener('click', async (e) => {
 
 
     const result = await response.json();
-    console.log("Server Response:", result); // Verified working in your screenshot
 
     // 1. Confetti
     if (result.is_correct && typeof rewardFX === 'function') {
@@ -204,7 +201,6 @@ document.addEventListener('click', async (e) => {
     if (balanceEl2 && result.new_balance_an) {
       // Directly update the text content of the unique ID
       balanceEl2.textContent = result.new_balance_an;
-      console.log("Header balance updated successfully.");
     } else {
       console.error("Target ID 'header-an-balance' NOT found or balance missing.");
     }
@@ -212,7 +208,6 @@ document.addEventListener('click', async (e) => {
     if (balanceEl && result.new_balance_an) {
       // Directly update the text content of the unique ID
       balanceEl.textContent = result.new_balance_an;
-      console.log("Header balance updated successfully.");
     } else {
       console.error("Target ID 'header-an-balance' NOT found or balance missing.");
     }
@@ -231,7 +226,6 @@ document.addEventListener('click', async (e) => {
 
     if (nextCard && currentCard) {
       currentCard.innerHTML = nextCard.innerHTML;
-      console.log("Card swapped successfully.");
     } else {
       window.location.reload();
     }

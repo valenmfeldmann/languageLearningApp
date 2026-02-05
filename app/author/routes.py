@@ -1198,6 +1198,60 @@ def lesson_block_update(lesson_id: str, block_id: str):
     return redirect(url_for("author.lesson_edit", lesson_id=lesson.id, block_id=b.id))
 
 
+# @bp.post("/lesson/<lesson_id>/assets/upload")
+# @login_required
+# def lesson_asset_upload(lesson_id: str):
+#     _require_author()
+#     lesson = Lesson.query.get_or_404(lesson_id)
+#     try:
+#         _require_lesson_edit_perm(lesson)
+#     except PermissionError:
+#         abort(403)
+#
+#     fs = request.files.get("file")
+#     if not fs or not fs.filename:
+#         flash("No file selected.", "error")
+#         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#     # store under instance/lesson_assets/<lesson_id>/assets/<filename>
+#     root = _assets_root() / lesson.id / "assets"
+#     root.mkdir(parents=True, exist_ok=True)
+#
+#     filename = secure_filename(fs.filename)
+#     if not filename:
+#         flash("Bad filename.", "error")
+#         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#     target = (root / filename).resolve()
+#     if not str(target).startswith(str(((_assets_root() / lesson.id).resolve()))):
+#         flash("Refused path.", "error")
+#         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#     fs.save(target)
+#
+#     ref = f"assets/{filename}"
+#     size_bytes = target.stat().st_size
+#
+#     existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+#     if existing:
+#         existing.storage_path = str(target)
+#         existing.content_type = fs.mimetype
+#         existing.size_bytes = size_bytes
+#     else:
+#         db.session.add(LessonAsset(
+#             lesson_id=lesson.id,
+#             ref=ref,
+#             storage_path=str(target),
+#             content_type=fs.mimetype,
+#             size_bytes=size_bytes,
+#         ))
+#
+#     db.session.commit()
+#     flash(f"Uploaded {ref}", "success")
+#     return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+
+
 @bp.post("/lesson/<lesson_id>/assets/upload")
 @login_required
 def lesson_asset_upload(lesson_id: str):
@@ -1208,48 +1262,65 @@ def lesson_asset_upload(lesson_id: str):
     except PermissionError:
         abort(403)
 
-    fs = request.files.get("file")
-    if not fs or not fs.filename:
-        flash("No file selected.", "error")
+    # 1. Use getlist to capture multiple files from the 'files' input
+    uploaded_files = request.files.getlist("files")
+
+    if not uploaded_files or all(fs.filename == '' for fs in uploaded_files):
+        flash("No files selected.", "error")
         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
-    # store under instance/lesson_assets/<lesson_id>/assets/<filename>
+    # Prepare storage root once
     root = _assets_root() / lesson.id / "assets"
     root.mkdir(parents=True, exist_ok=True)
 
-    filename = secure_filename(fs.filename)
-    if not filename:
-        flash("Bad filename.", "error")
-        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+    success_count = 0
 
-    target = (root / filename).resolve()
-    if not str(target).startswith(str(((_assets_root() / lesson.id).resolve()))):
-        flash("Refused path.", "error")
-        return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+    for fs in uploaded_files:
+        if not fs or not fs.filename:
+            continue
 
-    fs.save(target)
+        filename = secure_filename(fs.filename)
+        if not filename:
+            continue
 
-    ref = f"assets/{filename}"
-    size_bytes = target.stat().st_size
+        # 2. Path security check (Preserved)
+        target = (root / filename).resolve()
+        parent_limit = (_assets_root() / lesson.id).resolve()
+        if not str(target).startswith(str(parent_limit)):
+            continue  # Skip malicious or invalid paths
 
-    existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
-    if existing:
-        existing.storage_path = str(target)
-        existing.content_type = fs.mimetype
-        existing.size_bytes = size_bytes
-    else:
-        db.session.add(LessonAsset(
-            lesson_id=lesson.id,
-            ref=ref,
-            storage_path=str(target),
-            content_type=fs.mimetype,
-            size_bytes=size_bytes,
-        ))
+        # 3. Save physical file
+        fs.save(target)
 
+        ref = f"assets/{filename}"
+        size_bytes = target.stat().st_size
+
+        # 4. Upsert logic (Preserved)
+        existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+        if existing:
+            existing.storage_path = str(target)
+            existing.content_type = fs.mimetype
+            existing.size_bytes = size_bytes
+        else:
+            db.session.add(LessonAsset(
+                lesson_id=lesson.id,
+                ref=ref,
+                storage_path=str(target),
+                content_type=fs.mimetype,
+                size_bytes=size_bytes,
+            ))
+
+        success_count += 1
+
+    # 5. Finalize transaction
     db.session.commit()
-    flash(f"Uploaded {ref}", "success")
-    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
+    if success_count > 0:
+        flash(f"Successfully uploaded {success_count} asset(s).", "success")
+    else:
+        flash("Failed to upload any valid assets.", "error")
+
+    return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
 
 # @bp.get("/curriculum/new")

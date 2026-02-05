@@ -369,9 +369,10 @@
 
       <h3>Assets</h3>
       <form method="post" enctype="multipart/form-data" action="{{ url_for('author.lesson_asset_upload', lesson_id=lesson.id) }}">
-        <input type="file" name="file" required>
-        <button type="submit">Upload</button>
+        <input type="file" name="files" multiple required>
+        <button type="submit">Upload All</button>
       </form>
+
 
       {% if assets|length > 0 %}
         <ul class="asset-list">

@@ -165,13 +165,14 @@
 
 {% block scripts %}
 <script>
+// Inside the <script> block in page.html
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.choice-btn');
   if (!btn) return;
 
   e.preventDefault();
 
-  // Prevent double-clicks
+  // Disable buttons to prevent double-submissions
   const allBtns = document.querySelectorAll('.choice-btn');
   allBtns.forEach(b => b.style.pointerEvents = 'none');
 
@@ -180,7 +181,6 @@ document.addEventListener('click', async (e) => {
   formData.append('choice_index', btn.value);
 
   try {
-    // 1. Submit answer via AJAX
     const response = await fetch(form.action, {
       method: 'POST',
       body: formData,
@@ -189,20 +189,18 @@ document.addEventListener('click', async (e) => {
 
     const result = await response.json();
 
-    // 2. Trigger Confetti
+    // 1. Trigger Confetti
     if (result.is_correct && typeof rewardFX === 'function') {
       rewardFX(result.payout);
     }
 
-    // 3. Update the Balance in the Header
+    // 2. Update Balance in Header
     const balanceEl = document.getElementById('header-an-balance');
     if (balanceEl && result.new_balance_an) {
       balanceEl.textContent = result.new_balance_an;
-    } else {
-      console.warn("Target ID 'header-an-balance' not found in DOM.");
     }
 
-    // 4. Swap only the Trivia Card
+    // 3. Fetch and swap the next question card
     const nextResponse = await fetch(window.location.href);
     const nextHtml = await nextResponse.text();
     const parser = new DOMParser();
@@ -213,12 +211,15 @@ document.addEventListener('click', async (e) => {
 
     if (nextCard && currentCard) {
       currentCard.innerHTML = nextCard.innerHTML;
+      // Re-enable pointer events for the new buttons
+      const newBtns = currentCard.querySelectorAll('.choice-btn');
+      newBtns.forEach(b => b.style.pointerEvents = 'auto');
     } else {
-      window.location.reload(); // Fallback if ID is missing
+      window.location.reload();
     }
   } catch (err) {
     console.error("AJAX Trivia Error:", err);
-    form.submit(); // Standard reload fallback
+    form.submit(); // Fallback to full reload
   }
 });
 </script>

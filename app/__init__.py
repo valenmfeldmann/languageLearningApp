@@ -1,3 +1,4 @@
+import mistune
 from dotenv import load_dotenv
 
 
@@ -128,25 +129,48 @@ def create_app():
 
     @app.context_processor
     def inject_wallet_banner():
+        # 1. If not logged in, provide safe defaults to avoid UndefinedErrors
         if not getattr(current_user, "is_authenticated", False):
-            return {}
+            return {
+                "an_balance_an": 0,
+                "an_warn": False,
+                "an_critical": False
+            }
 
-        # Suppress banner on auth/billing/author pages (tune as you like)
-        p = request.path or ""
-        if p.startswith("/auth") or p.startswith("/billing") or p.startswith("/author"):
-            return {}
-
+        # 2. Always fetch the actual balance for the User Pill
+        from app.access_ledger.service import get_user_an_balance_ticks, AN_SCALE, DAILY_TAX_AN
         ticks = get_user_an_balance_ticks(current_user.id)
         an = ticks / AN_SCALE
 
-        warn = an < 3*DAILY_TAX_AN
-        critical = an < 1*DAILY_TAX_AN
+        # 3. Determine if we SHOULD show the warning banner
+        # We suppress the VISUAL banner on auth/billing/author pages
+        p = request.path or ""
+        suppress_pages = ("/auth", "/billing", "/author")
+
+        show_warning_logic = not p.startswith(suppress_pages)
+
+        # 4. Set the flags
+        # If we are on an author page, an_warn becomes False, hiding the banner
+        # but an_balance_an still exists for the navigation bar.
+        warn = (an < 3 * DAILY_TAX_AN) if show_warning_logic else False
+        critical = (an < 1 * DAILY_TAX_AN) if show_warning_logic else False
 
         return {
             "an_balance_an": an,
             "an_warn": warn,
             "an_critical": critical,
         }
+
+
+    # Define the markdown filter
+    @app.template_filter('markdown')
+    def markdown_filter(text):
+        if not text:
+            return ""
+        # Initialize the renderer
+        markdown = mistune.create_markdown(escape=False)
+        return markdown(text)
+
 
 
     from flask import session

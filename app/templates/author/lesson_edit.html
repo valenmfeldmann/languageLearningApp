@@ -666,6 +666,7 @@
                 <label>Prompt type</label><br>
                 <select name="prompt_kind" id="prompt_kind">
                   <option value="text"  {% if prompt_kind=="text" %}selected{% endif %}>text</option>
+                  <option value="markdown"  {% if prompt_kind=="markdown" %}selected{% endif %}>markdown</option>
                   <option value="image" {% if prompt_kind=="image" %}selected{% endif %}>image</option>
                   <option value="audio" {% if prompt_kind=="audio" %}selected{% endif %}>audio</option>
                   <option value="video" {% if prompt_kind=="video" %}selected{% endif %}>video</option>
@@ -705,6 +706,7 @@
                         <label style="display:block;">Type</label>
                         <select name="choice_{{ loop.index0 }}_kind" id="choice_kind_{{ loop.index0 }}">
                           <option value="text"  {% if ck=="text" %}selected{% endif %}>text</option>
+                          <option value="markdown" {% if ck=="markdown" %}selected{% endif %}>markdown</option>
                           <option value="image" {% if ck=="image" %}selected{% endif %}>image</option>
                           <option value="audio" {% if ck=="audio" %}selected{% endif %}>audio</option>
                           <option value="video" {% if ck=="video" %}selected{% endif %}>video</option>

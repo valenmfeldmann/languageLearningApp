@@ -17,6 +17,10 @@
 
     {% if k == "text" %}
       {{ v }}
+    {% elif k == "markdown" %}
+      <div class="markdown-body">
+        {{ v | markdown | safe }}
+      </div>
     {% elif k == "image" %}
       <img src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
            style="max-width:320px; height:auto;">
@@ -49,14 +53,17 @@
 
     <div style="margin: 8px 0;">
       {% for c in choices %}
-        <div style="margin: 4px 0;">
-          <label style="display:flex; gap:8px; align-items:center;">
-            <input type="radio" name="choice_index" value="{{ loop.index0 }}" required>
-            {{ render_typed(c, lesson.id) }}
+        <div style="margin: 12px 0;">
+          <label style="display:flex; gap:12px; align-items:flex-start; cursor:pointer;">
+            <input type="radio" name="choice_index" value="{{ loop.index0 }}" required style="margin-top: 4px;">
+            <div class="choice-content" style="flex:1;">
+              {{ render_typed(c, lesson.id) }}
+            </div>
           </label>
         </div>
       {% endfor %}
     </div>
+
 
     <button type="submit" {% if not can_submit %}disabled{% endif %}>
       {% if mode != "no_check" %}Check{% else %}Submit{% endif %}

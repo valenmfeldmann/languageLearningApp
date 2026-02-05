@@ -813,24 +813,22 @@
       </nav>
 
       {% if an_warn %}
-        <div style="
-            margin: 10px auto;
-            max-width: 980px;
-            padding: 10px 12px;
-            border-radius: 10px;
-            border: 1px solid rgba(255,255,255,0.12);
-            background: rgba(255,255,255,0.06);
-          ">
+        <div style="margin: 10px auto; max-width: 980px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);">
           {% if an_critical %}
             <strong>⚠ Low AN:</strong>
-            You have {{ "%.3f"|format(an_balance_an) }} AN. If you can’t pay the 1 AN/day upkeep, your access will be canceled.
           {% else %}
             <strong>Heads up:</strong>
-            You have {{ "%.3f"|format(an_balance_an) }} AN (~{{ (an_balance_an)|int }} days of upkeep).
           {% endif %}
-          <span style="opacity:0.75;">
-            (Check your <a href="/app/portfolio">portfolio</a>.)
-          </span>
+
+          You have <span id="header-an-balance">{{ "%.3f"|format(an_balance_an) }}</span> AN
+
+          {% if not an_critical %}
+            (~{{ (an_balance_an)|int }} days of upkeep)
+          {% else %}
+            . If you can’t pay the 1 AN/day upkeep, your access will be canceled.
+          {% endif %}
+
+          <span style="opacity:0.75;">(Check your <a href="{{ url_for('appui.portfolio') }}">portfolio</a>.)</span>
         </div>
       {% endif %}
 

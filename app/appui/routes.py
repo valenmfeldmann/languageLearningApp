@@ -313,11 +313,17 @@ def trivia_answer():
 
     db.session.commit()
 
-    # Detect AJAX request
+    # Calculate fresh balance for the UI
+    from app.access_ledger.service import get_user_an_balance_ticks, AN_SCALE
+    new_ticks = get_user_an_balance_ticks(current_user.id)
+    new_an = new_ticks / AN_SCALE
+
+    # If it's an AJAX request (XHR)
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
         return jsonify({
             "is_correct": bool(is_correct),
-            "payout": payout_ticks
+            "payout": payout_ticks,
+            "new_balance_an": f"{new_an:.3f}"
         })
 
     # flash(("Correct! " if is_correct else "Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""), "success" if is_correct else "error")

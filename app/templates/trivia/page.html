@@ -160,19 +160,22 @@
       </div>
     {% endif %}
   </div>
+
 </div>
+
 {% endblock %}
 
 {% block scripts %}
 <script>
-// Inside the <script> block in page.html
+console.log("Trivia Script Loaded and Listening..."); // This PROVES the script is running
+
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.choice-btn');
   if (!btn) return;
 
   e.preventDefault();
+  console.log("Button clicked, sending answer...");
 
-  // Disable buttons to prevent double-submissions
   const allBtns = document.querySelectorAll('.choice-btn');
   allBtns.forEach(b => b.style.pointerEvents = 'none');
 
@@ -187,20 +190,37 @@ document.addEventListener('click', async (e) => {
       headers: { 'X-Requested-With': 'XMLHttpRequest' }
     });
 
-    const result = await response.json();
 
-    // 1. Trigger Confetti
+    const result = await response.json();
+    console.log("Server Response:", result); // Verified working in your screenshot
+
+    // 1. Confetti
     if (result.is_correct && typeof rewardFX === 'function') {
       rewardFX(result.payout);
     }
 
-    // 2. Update Balance in Header
+    // 2. Update the Balance in the Header
+    const balanceEl2 = document.getElementById('header-an-balance2');
+    if (balanceEl2 && result.new_balance_an) {
+      // Directly update the text content of the unique ID
+      balanceEl2.textContent = result.new_balance_an;
+      console.log("Header balance updated successfully.");
+    } else {
+      console.error("Target ID 'header-an-balance' NOT found or balance missing.");
+    }
     const balanceEl = document.getElementById('header-an-balance');
     if (balanceEl && result.new_balance_an) {
+      // Directly update the text content of the unique ID
       balanceEl.textContent = result.new_balance_an;
+      console.log("Header balance updated successfully.");
+    } else {
+      console.error("Target ID 'header-an-balance' NOT found or balance missing.");
     }
 
-    // 3. Fetch and swap the next question card
+
+
+
+    // 3. Swap the Card
     const nextResponse = await fetch(window.location.href);
     const nextHtml = await nextResponse.text();
     const parser = new DOMParser();
@@ -211,15 +231,13 @@ document.addEventListener('click', async (e) => {
 
     if (nextCard && currentCard) {
       currentCard.innerHTML = nextCard.innerHTML;
-      // Re-enable pointer events for the new buttons
-      const newBtns = currentCard.querySelectorAll('.choice-btn');
-      newBtns.forEach(b => b.style.pointerEvents = 'auto');
+      console.log("Card swapped successfully.");
     } else {
       window.location.reload();
     }
   } catch (err) {
-    console.error("AJAX Trivia Error:", err);
-    form.submit(); // Fallback to full reload
+    console.error("Critical AJAX Error:", err);
+    form.submit();
   }
 });
 </script>

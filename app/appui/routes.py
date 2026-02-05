@@ -282,8 +282,16 @@ def trivia_answer():
         extra = int(random.expovariate(1 / 10.0))  # expected ~10, can be 0
         payout_ticks = 1 + max(0, extra)
 
-        today = datetime.utcnow().date().isoformat()
-        key = f"trivia_reward:{current_user.id}:{block.id}:{today}"
+        # today = datetime.utcnow().date().isoformat()
+        # key = f"trivia_reward:{current_user.id}:{block.id}:{today}"
+
+        import uuid
+        key = f"trivia_reward:{current_user.id}:{block.id}:{uuid.uuid4().hex}"
+
+        # import time
+        # # Add a timestamp so the key is always unique for testing
+        # key = f"trivia_reward:{current_user.id}:{block.id}:{today}:{time.time()}"
+
 
         issuer = get_or_create_system_account("rewards_pool")
         user_wallet = get_or_create_user_wallet(current_user.id)
@@ -313,10 +321,11 @@ def trivia_answer():
 
     db.session.commit()
 
-    # Calculate fresh balance for the UI
+    # FORCE a fresh read of the balance after the commit
     from app.access_ledger.service import get_user_an_balance_ticks, AN_SCALE
-    new_ticks = get_user_an_balance_ticks(current_user.id)
+    new_ticks = get_user_an_balance_ticks(current_user.id)  #
     new_an = new_ticks / AN_SCALE
+
 
     # If it's an AJAX request (XHR)
     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':

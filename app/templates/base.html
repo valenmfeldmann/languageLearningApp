@@ -787,10 +787,14 @@
 
         <a class="navlink" href="{{ url_for('appui.account') }}">Account</a>
 
+
         {% if current_user.is_authenticated %}
           <span class="userpill" title="{{ current_user.email }}">
-            <span class="dot"></span>
-            {{ current_user.email }}
+              <span class="dot"></span>
+              <span id="header-an-balance2" style="margin-right: 8px; font-weight: bold; color: var(--ok);">
+                  {{ "%.3f"|format(an_balance_an) }} AN
+              </span>
+              {{ current_user.email }}
           </span>
 
           <a href="{{ url_for('auth.logout') }}"
@@ -813,26 +817,21 @@
       </nav>
 
       {% if an_warn %}
-        <div style="margin: 10px auto; max-width: 980px; padding: 10px 12px; border-radius: 10px; border: 1px solid rgba(255,255,255,0.12); background: rgba(255,255,255,0.06);">
+        <div class="header-warning-banner">
           {% if an_critical %}
             <strong>⚠ Low AN:</strong>
           {% else %}
             <strong>Heads up:</strong>
           {% endif %}
 
-          You have <span id="header-an-balance">{{ "%.3f"|format(an_balance_an) }}</span> AN
+          {# This ID must exist exactly once in the DOM #}
+          You have <span id="header-an-balance">{{ "%.4f"|format(an_balance_an) }}</span> AN
 
           {% if not an_critical %}
             (~{{ (an_balance_an)|int }} days of upkeep)
-          {% else %}
-            . If you can’t pay the 1 AN/day upkeep, your access will be canceled.
           {% endif %}
-
-          <span style="opacity:0.75;">(Check your <a href="{{ url_for('appui.portfolio') }}">portfolio</a>.)</span>
         </div>
       {% endif %}
-
-
 
 
     </div>

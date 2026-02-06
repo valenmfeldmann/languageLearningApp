@@ -12,8 +12,12 @@
         {{ v | markdown | safe }}
       </div>
     {% elif k == "image" %}
-      <img src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
-           style="max-width:320px; height:auto; border-radius:10px; display:block;">
+      <img
+        src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
+        alt=""
+        {# Changed max-width to 100% to respect parent container bounds #}
+        style="max-width: 100%; height: auto; border-radius: 10px; display: block;"
+      />
     {% elif k == "audio" %}
       <audio controls src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
              style="width:100%; margin-top: 10px;"></audio>

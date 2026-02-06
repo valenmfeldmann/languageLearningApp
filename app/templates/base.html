@@ -781,11 +781,18 @@
 
 
 
-        {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons) %}
+
+        {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons or nav_links.author_curricula) %}
           <span style="display:inline-flex; gap:10px; margin-left:14px; align-items:center;">
             {% if nav_links.author_lessons %}
               <a href="{{ nav_links.author_lessons }}" class="nav-pill">Manage Lessons</a>
             {% endif %}
+
+            {# --- NEW: Manage Curricula Pill --- #}
+            {% if nav_links.author_curricula %}
+              <a href="{{ nav_links.author_curricula }}" class="nav-pill">Manage Curricula</a>
+            {% endif %}
+
             {% if nav_links.new_lesson %}
               <a href="{{ nav_links.new_lesson }}" class="nav-pill">+ Lesson</a>
             {% endif %}
@@ -794,7 +801,6 @@
             {% endif %}
           </span>
         {% endif %}
-
 
         <span style="opacity:.35; padding:0 6px;">|</span>
 

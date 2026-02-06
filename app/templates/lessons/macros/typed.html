@@ -1,36 +1,29 @@
 {# app/templates/lessons/macros/typed.html #}
 
 {% macro render_typed(val, lesson_id) %}
-  {# "val" can be:
-     - plain string
-     - {"kind":"text","value":"..."}
-     - {"kind":"image","value":"assets/foo.jpg"}
-     - {"kind":"video","value":"assets/foo.mp4"}  # optional
-  #}
-
   {% if val is mapping %}
     {% set k = val.get("kind", "text") %}
     {% set v = val.get("value", "") %}
 
     {% if k == "text" %}
       {{ v }}
-
+    {% elif k == "markdown" %}
+      <div class="markdown-body">
+        {{ v | markdown | safe }}
+      </div>
     {% elif k == "image" %}
-      <img
-        src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
-        alt=""
-        style="max-width: 100%; height: auto; border-radius: 10px; display: block;"
-      />
-
+      <img src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
+           style="max-width:320px; height:auto; border-radius:10px; display:block;">
+    {% elif k == "audio" %}
+      <audio controls src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
+             style="width:100%; margin-top: 10px;"></audio>
     {% elif k == "video" %}
-      <video controls style="max-width: 100%; border-radius: 10px; display: block;">
-        <source src="{{ url_for('main.lesson_asset', lesson_id=lesson_id, path=v) }}">
-      </video>
-
+      <video controls preload="metadata"
+             style="max-width:480px; height:auto; border-radius:10px; display:block;"
+             src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></video>
     {% else %}
-      {{ v }}
+      <code>[{{ k }}]</code> {{ v }}
     {% endif %}
-
   {% else %}
     {{ val }}
   {% endif %}

@@ -60,7 +60,9 @@
 
 
 
-  <form method="POST" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+{# --- Start of Replace Block (Line 66) --- #}
+<form method="POST" enctype="multipart/form-data" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+
     <div style="
       max-width:1100px;
       border:1px solid rgba(255,255,255,0.18);
@@ -92,40 +94,30 @@
         <button type="submit" name="publish_action" value="publish">Publish</button>
       {% endif %}
     </div>
-  </form>
 
-
-
-
-
-
-  <details class="panel" style="margin-bottom: 30px; border: 1px solid rgba(168,199,255,0.1); border-radius: 12px; overflow: hidden; cursor: pointer;">
-      <summary style="padding: 16px 20px; color: var(--link); font-weight: bold; font-size: 1.1rem; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-          <span>General Settings</span>
-          <span class="muted" style="font-size: 12px; font-weight: 400;">(Click to edit title/description)</span>
-      </summary>
-
-      <div style="padding: 0 20px 20px 20px; cursor: default;">
-          <form method="POST" action="{{ url_for('author.curriculum_update_settings', curriculum_id=curriculum.id) }}" style="border-top: 1px solid rgba(168,199,255,0.05); padding-top: 20px;">
-              <div style="display: flex; flex-direction: column; gap: 15px;">
-                  <div style="display: flex; flex-direction: column; gap: 5px;">
-                      <label for="title" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Title</label>
-                      <input type="text" id="title" name="title" value="{{ curriculum.title }}"
-                             style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px;" required>
-                  </div>
-                  <div style="display: flex; flex-direction: column; gap: 5px;">
-                      <label for="description" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Description</label>
-                      <textarea id="description" name="description" rows="3"
-                                style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px; font-family: inherit;">{{ curriculum.description }}</textarea>
-                  </div>
-                  <div style="text-align: right;">
-                      <button type="submit" class="btn primary">Save Settings</button>
-                  </div>
-              </div>
-          </form>
-      </div>
-  </details>
-
+    <details class="panel" style="margin-bottom: 30px; border: 1px solid rgba(168,199,255,0.1); border-radius: 12px; overflow: hidden; cursor: pointer;">
+        <summary style="padding: 16px 20px; color: var(--link); font-weight: bold; font-size: 1.1rem; list-style: none; display: flex; justify-content: space-between; align-items: center;">
+            <span>General Settings</span>
+            <span class="muted" style="font-size: 12px; font-weight: 400;">(Click to edit title/description)</span>
+        </summary>
+        <div style="padding: 0 20px 20px 20px; cursor: default;">
+            <div style="border-top: 1px solid rgba(168,199,255,0.05); padding-top: 20px;">
+                <div style="display: flex; flex-direction: column; gap: 15px;">
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <label for="title" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Title</label>
+                        <input type="text" id="title_field" name="title_meta" value="{{ curriculum.title }}"
+                               style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px;">
+                    </div>
+                    <div style="display: flex; flex-direction: column; gap: 5px;">
+                        <label for="description" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Description</label>
+                        <textarea id="description_field" name="description_meta" rows="3"
+                                  style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px; font-family: inherit;">{{ curriculum.description }}</textarea>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </details>
+{# --- End of Replace Block (Line 176) --- #}
 
 
 

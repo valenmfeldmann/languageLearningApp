@@ -496,6 +496,21 @@ def import_post():
     return redirect(url_for("main.lesson_page", lesson_code=lesson.code))
 
 
+# app/author/routes.py
+
+@bp.get("/curricula")
+@login_required
+def curricula_index():
+    _require_author()
+    # Fetch curricula where the user has an ownership stake
+    curricula = (Curriculum.query
+                 .join(CurriculumOwner)
+                 .filter(CurriculumOwner.user_id == current_user.id)
+                 .order_by(Curriculum.updated_at.desc())
+                 .all())
+
+    return render_template("author/curriculum_index.html", curricula=curricula)
+
 @bp.post("/lesson/<lesson_id>/apply_json")
 @login_required
 def lesson_apply_json(lesson_id: str):
@@ -1700,6 +1715,7 @@ def _save_curriculum_cover(curriculum_id: str, file_storage) -> str:
     return url_for("static", filename=rel, v=str(int(time.time())))
 
 
+
 @bp.post("/curriculum/<curriculum_id>/edit")
 @login_required
 def curriculum_edit_post(curriculum_id: str):
@@ -1708,82 +1724,150 @@ def curriculum_edit_post(curriculum_id: str):
     from flask import abort
 
     cur = Curriculum.query.get_or_404(curriculum_id)
-
-    # Match GET permissions (important)
     try:
         _require_curriculum_perm(cur.id, need_edit=True)
     except PermissionError:
         abort(403)
 
-    # Handle Publish / Unpublish
+    # 1. Handle Metadata (Title/Desc) if provided in the main save
+    new_title = (request.form.get("title_meta") or "").strip()
+    if new_title:
+        cur.title = new_title
+    cur.description = (request.form.get("description_meta") or "").strip() or cur.description
+
+    # 2. Handle Publish / Unpublish
     action = (request.form.get("publish_action") or "").strip().lower()
     if action == "publish":
         cur.is_published = True
         if not cur.published_at:
-            cur.published_at = _dt.utcnow()
+            cur.published_at = datetime.utcnow()
     elif action == "unpublish":
         cur.is_published = False
         cur.published_at = None
 
-    # Items come in as parallel arrays
+    # 3. Items Update (SAFEGUARD: Only wipe if data is present)
     item_type = request.form.getlist("item_type")
-    phase_title = request.form.getlist("phase_title")
-    lesson_id = request.form.getlist("lesson_id")
-    note = request.form.getlist("note")
-    repeat = request.form.getlist("repeat")
+    if item_type:
+        CurriculumItem.query.filter_by(curriculum_id=cur.id).delete()
+        db.session.flush()
 
-    # wipe + rebuild (fast + consistent)
-    CurriculumItem.query.filter_by(curriculum_id=cur.id).delete()
-    db.session.flush()
+        pos = 0
+        phase_title = request.form.getlist("phase_title")
+        lesson_id = request.form.getlist("lesson_id")
+        note = request.form.getlist("note")
+        repeat = request.form.getlist("repeat")
 
-    pos = 0
-    for i, t in enumerate(item_type):
-        t = (t or "").strip().lower()
-
-        if t == "phase":
-            title = (phase_title[i] if i < len(phase_title) else "").strip()
-            if not title:
-                title = "Phase"
-            db.session.add(CurriculumItem(
-                curriculum_id=cur.id,
-                position=pos,
-                item_type="phase",
-                phase_title=title,
-            ))
-            pos += 1
-
-        elif t == "lesson":
-            lid = (lesson_id[i] if i < len(lesson_id) else "").strip() or None
-            if not lid:
-                continue
-            n = 1
-            try:
-                n = max(1, min(50, int((repeat[i] if i < len(repeat) else "1") or "1")))
-            except Exception:
-                n = 1
-            n_note = (note[i] if i < len(note) else "").strip() or None
-
-            for _ in range(n):
-                db.session.add(CurriculumItem(
-                    curriculum_id=cur.id,
-                    position=pos,
-                    item_type="lesson",
-                    lesson_id=lid,
-                    note=n_note,
-                ))
+        for i, t in enumerate(item_type):
+            t = (t or "").strip().lower()
+            if t == "phase":
+                title = (phase_title[i] if i < len(phase_title) else "").strip() or "Phase"
+                db.session.add(CurriculumItem(curriculum_id=cur.id, position=pos, item_type="phase", phase_title=title))
                 pos += 1
+            elif t == "lesson":
+                lid = (lesson_id[i] if i < len(lesson_id) else "").strip() or None
+                if not lid: continue
+                n = 1
+                try:
+                    n = max(1, min(50, int((repeat[i] if i < len(repeat) else "1") or "1")))
+                except: n = 1
+                n_note = (note[i] if i < len(note) else "").strip() or None
+                for _ in range(n):
+                    db.session.add(CurriculumItem(curriculum_id=cur.id, position=pos, item_type="lesson", lesson_id=lid, note=n_note))
+                    pos += 1
 
+    # 4. Handle Cover
     cover = request.files.get("cover_image")
     if cover and cover.filename:
-        if not _allowed_image(cover.filename):
-            flash("Cover image must be png/jpg/jpeg/webp/gif.", "error")
-            return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
-
         cur.cover_image_url = _save_curriculum_cover(cur.id, cover)
 
     db.session.commit()
     flash("Curriculum saved.", "success")
     return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+# @bp.post("/curriculum/<curriculum_id>/edit")
+# @login_required
+# def curriculum_edit_post(curriculum_id: str):
+#     _require_author()
+#     from app.models import Curriculum, CurriculumItem
+#     from flask import abort
+#
+#     cur = Curriculum.query.get_or_404(curriculum_id)
+#
+#     # Match GET permissions (important)
+#     try:
+#         _require_curriculum_perm(cur.id, need_edit=True)
+#     except PermissionError:
+#         abort(403)
+#
+#     # Handle Publish / Unpublish
+#     action = (request.form.get("publish_action") or "").strip().lower()
+#     if action == "publish":
+#         cur.is_published = True
+#         if not cur.published_at:
+#             cur.published_at = _dt.utcnow()
+#     elif action == "unpublish":
+#         cur.is_published = False
+#         cur.published_at = None
+#
+#     # Items come in as parallel arrays
+#     item_type = request.form.getlist("item_type")
+#     phase_title = request.form.getlist("phase_title")
+#     lesson_id = request.form.getlist("lesson_id")
+#     note = request.form.getlist("note")
+#     repeat = request.form.getlist("repeat")
+#
+#     # wipe + rebuild (fast + consistent)
+#     CurriculumItem.query.filter_by(curriculum_id=cur.id).delete()
+#     db.session.flush()
+#
+#     pos = 0
+#     for i, t in enumerate(item_type):
+#         t = (t or "").strip().lower()
+#
+#         if t == "phase":
+#             title = (phase_title[i] if i < len(phase_title) else "").strip()
+#             if not title:
+#                 title = "Phase"
+#             db.session.add(CurriculumItem(
+#                 curriculum_id=cur.id,
+#                 position=pos,
+#                 item_type="phase",
+#                 phase_title=title,
+#             ))
+#             pos += 1
+#
+#         elif t == "lesson":
+#             lid = (lesson_id[i] if i < len(lesson_id) else "").strip() or None
+#             if not lid:
+#                 continue
+#             n = 1
+#             try:
+#                 n = max(1, min(50, int((repeat[i] if i < len(repeat) else "1") or "1")))
+#             except Exception:
+#                 n = 1
+#             n_note = (note[i] if i < len(note) else "").strip() or None
+#
+#             for _ in range(n):
+#                 db.session.add(CurriculumItem(
+#                     curriculum_id=cur.id,
+#                     position=pos,
+#                     item_type="lesson",
+#                     lesson_id=lid,
+#                     note=n_note,
+#                 ))
+#                 pos += 1
+#
+#     cover = request.files.get("cover_image")
+#     if cover and cover.filename:
+#         if not _allowed_image(cover.filename):
+#             flash("Cover image must be png/jpg/jpeg/webp/gif.", "error")
+#             return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+#
+#         cur.cover_image_url = _save_curriculum_cover(cur.id, cover)
+#
+#     db.session.commit()
+#     flash("Curriculum saved.", "success")
+#     return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
 
 
 @bp.post("/curriculum/<curriculum_id>/cover/remove")

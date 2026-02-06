@@ -225,13 +225,43 @@ document.addEventListener('click', async (e) => {
     const currentCard = document.getElementById('trivia-card-container');
 
     if (nextCard && currentCard) {
+      // 1. Existing functionality: Replace the HTML content
       currentCard.innerHTML = nextCard.innerHTML;
+
+      // 2. New functionality: Find and play the new audio prompt
+      const newAudio = currentCard.querySelector('audio');
+      if (newAudio) {
+        // We use a small timeout to ensure the DOM has finished rendering
+        // before attempting to interact with the new element.
+        setTimeout(() => {
+          newAudio.play().catch(err => {
+            // Log the error if autoplay is blocked by browser policy
+            console.log("Autoplay prevented:", err);
+          });
+        }, 50);
+      }
     } else {
       window.location.reload();
     }
+
+
+
   } catch (err) {
     console.error("Critical AJAX Error:", err);
     form.submit();
+  }
+});
+
+
+
+// Add this at the very end of your script block in app/templates/trivia/page.html
+
+window.addEventListener('DOMContentLoaded', () => {
+  const firstAudio = document.querySelector('#trivia-card-container audio');
+  if (firstAudio) {
+    // Note: Browser policy might require a click anywhere on the page first
+    // before autoplay is allowed for the very first question.
+    firstAudio.play().catch(e => console.log("Initial autoplay blocked:", e));
   }
 });
 </script>

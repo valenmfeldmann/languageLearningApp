@@ -1,0 +1,121 @@
+
+
+-- select * from lesson_school
+
+-- select *
+-- from lesson
+
+
+
+
+
+-- select * from curriculum
+
+
+
+
+
+-- -- This let's us see all interesting information about all users
+-- select owner_user_id, name, email, balance, asset_id, account_type, (-stripe_balance_cents/100) as stripe_balance, status, cancel_at, access_level_mult as user_level, access_revoked_reason
+-- from access_account
+-- join access_balance on access_balance.account_id = access_account.id
+-- join "user" on "user".id = access_account.owner_user_id
+-- join "subscription" on subscription.user_id = "user".id
+-- where access_balance.asset_id = '9f55e9935b7d42c2bf75f840ae10e109' -- AN asset id - may need to change
+
+
+
+
+
+-- -- This let's us see the revenue we expect to make over the next month (in cents)
+-- select (885+stripe_balance_cents) as next_month_rev_for_user_cents
+-- from "user"
+-- join "subscription" on subscription.user_id = "user".id
+-- where cancel_at is null
+-- 	and -stripe_balance_cents < 885
+
+
+-- -- This let's us see the ledger
+-- select *
+-- from access_entry
+-- order by created_at
+
+
+-- -- This shows the currency and shares in circulation
+-- select *
+-- from access_balance
+-- where account_id in ('burn', 'treasury', 'rewards_pool')
+
+
+
+-- -- ROLLBACK;
+-- -- Give access back to a user that got kicked off
+-- BEGIN;
+
+-- WITH u AS (
+--   SELECT id
+--   FROM "user"
+--   WHERE lower(email) = lower('valenmfeldmann@gmail.com')
+--   LIMIT 1
+-- ),
+-- sub_fix AS (
+--   UPDATE subscription s
+--   SET
+--     status = 'active',
+--     cancel_at = NULL,
+--     access_revoked_reason = NULL
+--   FROM u
+--   WHERE s.user_id = u.id
+--   RETURNING s.user_id
+-- ),
+-- wallet AS (
+--   SELECT aa.id AS account_id
+--   FROM access_account aa
+--   JOIN u ON aa.owner_user_id = u.id
+--   WHERE aa.account_type = 'user_wallet'
+--   LIMIT 1
+-- ),
+-- bal_upsert AS (
+--   INSERT INTO access_balance (account_id, asset_id, balance, updated_at)
+--   SELECT wallet.account_id, 'asset_AN', 10000, now()
+--   FROM wallet
+--   ON CONFLICT (account_id, asset_id)
+--   DO UPDATE SET
+--     balance = access_balance.balance + 10000,
+--     updated_at = now()
+--   RETURNING account_id, asset_id, balance, updated_at
+-- )
+-- SELECT
+--   (SELECT id FROM u) AS user_id,
+--   (SELECT user_id FROM sub_fix) AS subscription_user_id_updated,
+--   (SELECT account_id FROM wallet) AS wallet_account_id,
+--   (SELECT balance FROM bal_upsert) AS new_an_ticks_balance;
+
+-- COMMIT;
+
+
+
+
+
+-- select *
+-- from lesson
+
+
+-- select *
+-- from curriculum
+
+
+-- select *
+-- from buddy_link
+
+-- select *
+-- from trivia_bad_vote
+
+
+
+-- select event_type, idempotency_key, created_at
+-- from access_txn
+-- where idempotency_key like 'signup_bonus:%'
+-- order by created_at desc
+-- limit 20;
+

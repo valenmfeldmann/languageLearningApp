@@ -10,34 +10,7 @@
 {% set mode = payload.get("mode", "graded") %}
 {% set can_submit = (attempt is defined and attempt) %}
 
-{% macro render_typed(val, lesson_id) %}
-  {% if val is mapping %}
-    {% set k = val.get("kind", "text") %}
-    {% set v = val.get("value", "") %}
-
-    {% if k == "text" %}
-      {{ v }}
-    {% elif k == "markdown" %}
-      <div class="markdown-body">
-        {{ v | markdown | safe }}
-      </div>
-    {% elif k == "image" %}
-      <img src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"
-           style="max-width:320px; height:auto;">
-    {% elif k == "audio" %}
-      <audio controls src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></audio>
-    {% elif k == "video" %}
-      <video controls preload="metadata"
-             style="max-width:480px; height:auto;"
-             src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></video>
-    {% else %}
-      {# future-proof fallback #}
-      <code>[{{ k }}]</code> {{ v }}
-    {% endif %}
-  {% else %}
-    {{ val }}
-  {% endif %}
-{% endmacro %}
+{% from "lessons/macros/typed.html" import render_typed %}
 
 
 <div style="margin: 12px 0;">

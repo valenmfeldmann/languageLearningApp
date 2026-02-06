@@ -1,0 +1,44 @@
+{% extends "base.html" %}
+{% block title %}My Curricula{% endblock %}
+
+{% block content %}
+<div style="max-width: 1000px; margin: 0 auto; padding: 20px;">
+  <div style="display: flex; justify-content: space-between; align-items: center; margin-bottom: 30px;">
+    <h1>My Curricula</h1>
+    <a href="{{ url_for('author.curriculum_new_form') }}" class="btn primary">+ New Curriculum</a>
+  </div>
+
+  {% if not curricula %}
+    <div class="panel" style="text-align: center; padding: 40px;">
+      <p class="muted">You haven't created any curricula yet.</p>
+    </div>
+  {% else %}
+    <div style="display: grid; gap: 16px;">
+      {% for cur in curricula %}
+        <div class="panel" style="display: flex; justify-content: space-between; align-items: center; padding: 20px; border: 1px solid rgba(255,255,255,0.1);">
+          <div>
+            <h3 style="margin: 0;">{{ cur.title }}</h3>
+            <div style="font-size: 13px; margin-top: 4px;">
+              <code class="muted">{{ cur.code }}</code>
+              <span style="margin: 0 8px; opacity: 0.3;">|</span>
+              {% if cur.is_published %}
+                <span style="color: var(--ok);">● Published</span>
+              {% else %}
+                <span style="color: var(--muted);">○ Draft (Private)</span>
+              {% endif %}
+              {% if cur.is_archived %}
+                <span style="margin-left: 8px; padding: 2px 8px; background: #442222; border-radius: 4px; font-size: 11px;">Archived</span>
+              {% endif %}
+            </div>
+          </div>
+          
+          <div style="display: flex; gap: 10px;">
+            <a href="{{ url_for('author.curriculum_edit', curriculum_id=cur.id) }}" class="btn small">Edit</a>
+            <a href="{{ url_for('main.curriculum_view', curriculum_code=cur.code) }}" class="btn small muted">View Page</a>
+          </div>
+        </div>
+      {% endfor %}
+    </div>
+  {% endif %}
+</div>
+{% endblock %}

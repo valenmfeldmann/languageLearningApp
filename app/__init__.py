@@ -198,6 +198,7 @@ def create_app():
                 "author_lessons": safe_url("author.lesson_index"),
                 "new_lesson": safe_url("author.lesson_new_form"),
                 "new_curriculum": safe_url("author.curriculum_new_form"),
+                "author_curricula": url_for('author.curricula_index'),
             }
         }
 

@@ -147,22 +147,7 @@ def _load_json_file(file_storage) -> dict[str, Any]:
 
 def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
     """
-    Minimal schema:
-    {
-      "code": "spanish-basics-01",
-      "title": "Basics 1",
-      "description": "...",            (optional)
-      "language_code": "es",           (optional)
-      "is_published": false,           (optional)
-      "blocks": [
-        {"type": "markdown", "payload": {"text": "..."}},
-        {"type": "video_url", "payload": {"url": "https://..."}},
-        {"type": "quiz_mcq", "payload": {...}}
-      ],
-      "assets": [
-        {"ref": "assets/img1.png", "content_type": "image/png"}   (optional)
-      ]
-    }
+    Schema updated to support Multimedia MCQs (Audio/Image).
     """
     code = payload.get("code")
     title = payload.get("title")
@@ -174,7 +159,6 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
         raise ValueError("Missing/invalid 'title' (string)")
     if not isinstance(blocks, list) or len(blocks) == 0:
         raise ValueError("Missing/invalid 'blocks' (non-empty list)")
-
 
     allowed_types = {
         "markdown",
@@ -198,29 +182,41 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
         if not isinstance(p, dict):
             raise ValueError(f"blocks[{i}].payload must be an object")
 
-        # Type-specific checks (minimal but catches common mistakes)
         if t == "markdown":
             if not isinstance(p.get("text"), str):
                 raise ValueError(f"blocks[{i}] markdown requires payload.text (string)")
+
         elif t == "video_url":
             url = p.get("url")
             if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
                 raise ValueError(f"blocks[{i}] video_url requires payload.url (http/https string)")
+
         elif t == "quiz_mcq":
             prompt = p.get("prompt")
             choices = p.get("choices")
             answer_index = p.get("answer_index")
-            if not isinstance(prompt, str) or not prompt.strip():
-                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.prompt (string)")
-            if not isinstance(choices, list) or len(choices) < 2 or not all(isinstance(c, str) for c in choices):
-                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.choices (list of >=2 strings)")
+
+            # FIX: Allow prompt to be string OR dict (for audio prompts)
+            if not isinstance(prompt, (str, dict)):
+                raise ValueError(f"blocks[{i}] quiz_mcq requires prompt (string or media object)")
+
+            # FIX: Allow each choice to be string OR dict (for image responses)
+            if not isinstance(choices, list) or len(choices) < 2:
+                raise ValueError(f"blocks[{i}] quiz_mcq requires payload.choices (list of >=2 items)")
+
+            for j, c in enumerate(choices):
+                if not isinstance(c, (str, dict)):
+                    raise ValueError(f"blocks[{i}].choices[{j}] must be string or media object")
+
             if not isinstance(answer_index, int) or not (0 <= answer_index < len(choices)):
                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.answer_index (int in range)")
+
         elif t in ("video_asset", "audio_asset"):
             ref = p.get("ref")
             if not isinstance(ref, str) or not ref.startswith("assets/"):
                 raise ValueError(f"blocks[{i}] {t} requires payload.ref like 'assets/...'")
 
+    # Asset section logic preserved
     assets = payload.get("assets", [])
     if assets is not None:
         if not isinstance(assets, list):
@@ -229,13 +225,103 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(a, dict):
                 raise ValueError(f"assets[{i}] must be an object")
             ref = a.get("ref")
-            if not isinstance(ref, str) or not ref.strip():
-                raise ValueError(f"assets[{i}].ref must be a string")
-            # Keep refs inside "assets/" namespace to avoid path weirdness
-            if not ref.startswith("assets/"):
+            if not isinstance(ref, str) or not ref.strip() or not ref.startswith("assets/"):
                 raise ValueError(f"assets[{i}].ref must start with 'assets/'")
 
     return payload
+
+
+# def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
+#     """
+#     Minimal schema:
+#     {
+#       "code": "spanish-basics-01",
+#       "title": "Basics 1",
+#       "description": "...",            (optional)
+#       "language_code": "es",           (optional)
+#       "is_published": false,           (optional)
+#       "blocks": [
+#         {"type": "markdown", "payload": {"text": "..."}},
+#         {"type": "video_url", "payload": {"url": "https://..."}},
+#         {"type": "quiz_mcq", "payload": {...}}
+#       ],
+#       "assets": [
+#         {"ref": "assets/img1.png", "content_type": "image/png"}   (optional)
+#       ]
+#     }
+#     """
+#     code = payload.get("code")
+#     title = payload.get("title")
+#     blocks = payload.get("blocks")
+#
+#     if not isinstance(code, str) or not code.strip():
+#         raise ValueError("Missing/invalid 'code' (string)")
+#     if not isinstance(title, str) or not title.strip():
+#         raise ValueError("Missing/invalid 'title' (string)")
+#     if not isinstance(blocks, list) or len(blocks) == 0:
+#         raise ValueError("Missing/invalid 'blocks' (non-empty list)")
+#
+#
+#     allowed_types = {
+#         "markdown",
+#         "video_url",
+#         "video_asset",
+#         "audio_asset",
+#         "quiz_mcq",
+#         "desmos",
+#         "html_safe",
+#         "callout",
+#         "reveal",
+#     }
+#
+#     for i, b in enumerate(blocks):
+#         if not isinstance(b, dict):
+#             raise ValueError(f"blocks[{i}] must be an object")
+#         t = b.get("type")
+#         p = b.get("payload")
+#         if t not in allowed_types:
+#             raise ValueError(f"blocks[{i}].type must be one of {sorted(allowed_types)}")
+#         if not isinstance(p, dict):
+#             raise ValueError(f"blocks[{i}].payload must be an object")
+#
+#         # Type-specific checks (minimal but catches common mistakes)
+#         if t == "markdown":
+#             if not isinstance(p.get("text"), str):
+#                 raise ValueError(f"blocks[{i}] markdown requires payload.text (string)")
+#         elif t == "video_url":
+#             url = p.get("url")
+#             if not isinstance(url, str) or not (url.startswith("http://") or url.startswith("https://")):
+#                 raise ValueError(f"blocks[{i}] video_url requires payload.url (http/https string)")
+#         elif t == "quiz_mcq":
+#             prompt = p.get("prompt")
+#             choices = p.get("choices")
+#             answer_index = p.get("answer_index")
+#             if not isinstance(prompt, str) or not prompt.strip():
+#                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.prompt (string)")
+#             if not isinstance(choices, list) or len(choices) < 2 or not all(isinstance(c, str) for c in choices):
+#                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.choices (list of >=2 strings)")
+#             if not isinstance(answer_index, int) or not (0 <= answer_index < len(choices)):
+#                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.answer_index (int in range)")
+#         elif t in ("video_asset", "audio_asset"):
+#             ref = p.get("ref")
+#             if not isinstance(ref, str) or not ref.startswith("assets/"):
+#                 raise ValueError(f"blocks[{i}] {t} requires payload.ref like 'assets/...'")
+#
+#     assets = payload.get("assets", [])
+#     if assets is not None:
+#         if not isinstance(assets, list):
+#             raise ValueError("'assets' must be a list if present")
+#         for i, a in enumerate(assets):
+#             if not isinstance(a, dict):
+#                 raise ValueError(f"assets[{i}] must be an object")
+#             ref = a.get("ref")
+#             if not isinstance(ref, str) or not ref.strip():
+#                 raise ValueError(f"assets[{i}].ref must be a string")
+#             # Keep refs inside "assets/" namespace to avoid path weirdness
+#             if not ref.startswith("assets/"):
+#                 raise ValueError(f"assets[{i}].ref must start with 'assets/'")
+#
+#     return payload
 
 
 def _extract_assets_zip(zip_fs, lesson_id: str) -> dict[str, tuple[str, int | None]]:

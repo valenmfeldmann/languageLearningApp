@@ -90,7 +90,6 @@
 <script>
 let bufferReady = false;
 
-// Preload next HTML AND fetch images/audio into browser cache
 async function preloadNextQuestion() {
   bufferReady = false;
   const buffer = document.getElementById('trivia-buffer');
@@ -103,16 +102,27 @@ async function preloadNextQuestion() {
     if (nextCard) {
       buffer.innerHTML = nextCard.innerHTML;
 
-      // DEEP PRELOAD: Force browser to fetch images in the background
+      // ACTIVE PRIMING: Find all images in the buffered question
       const images = buffer.querySelectorAll('img');
-      const assets = Array.from(images).map(img => new Promise((resolve) => {
-        const i = new Image();
-        i.onload = resolve;
-        i.onerror = resolve;
-        i.src = img.src;
-      }));
+      const preloadPromises = Array.from(images).map(img => {
+        return new Promise((resolve) => {
+          const tempImg = new Image();
+          tempImg.src = img.src;
 
-      // Pre-fetch audio if present
+          // .decode() is the secret for mobile — it forces the GPU
+          // to process the image before we show it.
+          tempImg.decode().then(() => {
+            console.log("Mobile GPU primed image:", img.src);
+            resolve();
+          }).catch(() => {
+            // Fallback for older browsers
+            tempImg.onload = resolve;
+            tempImg.onerror = resolve;
+          });
+        });
+      });
+
+      // Pre-prime the audio stream
       const audios = buffer.querySelectorAll('audio source');
       audios.forEach(src => {
         const a = new Audio();
@@ -120,9 +130,9 @@ async function preloadNextQuestion() {
         a.preload = "auto";
       });
 
-      await Promise.all(assets);
+      await Promise.all(preloadPromises);
       bufferReady = true;
-      console.log("Assets Deep Preloaded.");
+      console.log("Question fully primed for mobile.");
     }
   } catch (err) { console.error("Preload fail", err); }
 }
@@ -133,7 +143,7 @@ document.addEventListener('click', async (e) => {
 
   e.preventDefault();
 
-  // 1. Lockdown UI
+  // 1. Lock UI
   const activeBtns = document.querySelectorAll('#active-trivia-card .choice-btn');
   activeBtns.forEach(b => {
     b.style.pointerEvents = 'none';
@@ -152,7 +162,7 @@ document.addEventListener('click', async (e) => {
     });
     const result = await response.json();
 
-    // 2. Celebration
+    // 2. Feedback
     if (result.is_correct && typeof rewardFX === 'function') {
       rewardFX(result.payout);
     }
@@ -162,19 +172,20 @@ document.addEventListener('click', async (e) => {
       if (el && result.new_balance_an) el.textContent = result.new_balance_an;
     });
 
-    // 3. SWAP & CLEANUP
+    // 3. THE SWAP
+    // Increase delay slightly (500ms) to allow mobile hardware
+    // to finish the confetti before the heavy DOM swap.
     setTimeout(() => {
       const activeCard = document.getElementById('active-trivia-card');
       const buffer = document.getElementById('trivia-buffer');
 
-      // RESET SCREEN BRIGHTNESS: Delete any reward overlays from base.html
+      // Reset screen brightness
       document.querySelectorAll('.reward-overlay').forEach(el => el.remove());
 
       if (bufferReady && buffer.innerHTML.trim() !== "") {
         activeCard.innerHTML = buffer.innerHTML;
         buffer.innerHTML = "";
 
-        // Autoplay fresh question
         const newAudio = activeCard.querySelector('audio');
         if (newAudio) {
           setTimeout(() => newAudio.play().catch(() => {}), 50);
@@ -184,7 +195,7 @@ document.addEventListener('click', async (e) => {
       } else {
         window.location.reload();
       }
-    }, 450); // Delay gives user time to see their success
+    }, 500);
 
   } catch (err) { window.location.reload(); }
 });

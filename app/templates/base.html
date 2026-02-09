@@ -1208,12 +1208,18 @@
       }
 
       // =========================
-      // Particles
+      // Optimized Particles
       // =========================
       function emitParticles(count, R, intensity, startDelayMs, ticksChunk, paletteIdx){
         const pal = PALETTE[paletteIdx % PALETTE.length];
 
-        for (let i = 0; i < count; i++){
+        // Use a DocumentFragment to minimize browser layout "thrashing"
+        const fragment = document.createDocumentFragment();
+
+        // CAP: Prevent more than 400 particles per burst to keep mobile snappy
+        const safeCount = Math.min(count, isMobile ? 80 : 400);
+
+        for (let i = 0; i < safeCount; i++){
           const p = document.createElement('div');
           p.className = 'reward-particle';
 
@@ -1241,9 +1247,11 @@
           const jitter = Math.random() * JITTER_DELAY_MS;
           p.style.animationDelay = (startDelayMs + jitter).toFixed(0) + 'ms';
 
-          overlay.appendChild(p);
+          fragment.appendChild(p);
         }
+        overlay.appendChild(fragment);
       }
+
 
       function spawnBurst(ticksChunk, startDelayMs, paletteIdx){
         const intensity = clamp01(ticksChunk / T_REF);

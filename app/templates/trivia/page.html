@@ -137,13 +137,26 @@ async function preloadNextQuestion() {
   } catch (err) { console.error("Preload fail", err); }
 }
 
+
+
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.choice-btn');
   if (!btn) return;
 
   e.preventDefault();
 
-  // 1. Lock UI
+  // --- AUDIO PRIMING ---
+  // We briefly interact with the current audio immediately on click.
+  // This satisfies browser security policies, keeping the "user gesture"
+  // alive for the NEXT question's audio after the celebration delay.
+  const currentAudio = document.querySelector('#active-trivia-card audio');
+  if (currentAudio) {
+    currentAudio.pause();
+    currentAudio.currentTime = 0;
+  }
+
+  // 1. LOCK UI
+  // Target only active buttons so the buffered ones stay enabled
   const activeBtns = document.querySelectorAll('#active-trivia-card .choice-btn');
   activeBtns.forEach(b => {
     b.style.pointerEvents = 'none';
@@ -162,7 +175,7 @@ document.addEventListener('click', async (e) => {
     });
     const result = await response.json();
 
-    // 2. Feedback
+    // 2. CELEBRATION
     if (result.is_correct && typeof rewardFX === 'function') {
       rewardFX(result.payout);
     }
@@ -173,32 +186,40 @@ document.addEventListener('click', async (e) => {
     });
 
     // 3. THE SWAP
-    // Increase delay slightly (500ms) to allow mobile hardware
-    // to finish the confetti before the heavy DOM swap.
+    // 1000ms delay allows the "Big Win" confetti to actually appear
+    // and the "plus ticks" label to be read before the card disappears.
     setTimeout(() => {
       const activeCard = document.getElementById('active-trivia-card');
       const buffer = document.getElementById('trivia-buffer');
 
-      // Reset screen brightness
+      // RESET SCREEN BRIGHTNESS: Remove any reward overlays from base.html
       document.querySelectorAll('.reward-overlay').forEach(el => el.remove());
 
       if (bufferReady && buffer.innerHTML.trim() !== "") {
         activeCard.innerHTML = buffer.innerHTML;
         buffer.innerHTML = "";
 
+        // Autoplay the fresh question
         const newAudio = activeCard.querySelector('audio');
         if (newAudio) {
-          setTimeout(() => newAudio.play().catch(() => {}), 50);
+          // Play immediately on swap; the gesture was primed above
+          newAudio.play().catch(err => console.log("Autoplay blocked:", err));
         }
 
         preloadNextQuestion();
       } else {
+        // Fallback if buffer wasn't ready
         window.location.reload();
       }
     }, 1000);
 
-  } catch (err) { window.location.reload(); }
+  } catch (err) {
+    console.error("Submission Error:", err);
+    window.location.reload();
+  }
 });
+
+
 
 window.addEventListener('DOMContentLoaded', () => {
   preloadNextQuestion();

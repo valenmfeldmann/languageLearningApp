@@ -1092,29 +1092,32 @@
       const DARK_MID_STOP   = 0.42;
       const DARK_OUTER_STOP = 0.62;
 
+
+
+      // === OPTIMIZED DARK SHIELD ===
       const darkBacker = document.createElement('div');
+      darkBacker.className = 'dark-shield'; // Add class for easier cleanup
       darkBacker.style.cssText = `
         position:absolute;
         left: 50%; top: 50%;
         transform: translate(-50%, -50%);
-        width: ${DARK_SHIELD_SIZE_PX}px;
-        height: ${DARK_SHIELD_SIZE_PX}px;
+        width: 200px; height: 200px;
         border-radius: 999px;
         pointer-events:none;
         opacity: 0;
         z-index: 1;
-
-        /* actually darken what's behind */
         background: radial-gradient(circle at 50% 50%,
-          rgba(0,0,0,${DARK_CENTER_ALPHA}) 0%,
-          rgba(0,0,0,${DARK_CENTER_ALPHA}) ${Math.round(DARK_INNER_STOP*100)}%,
-          rgba(0,0,0,${DARK_MID_ALPHA})    ${Math.round(DARK_MID_STOP*100)}%,
-          rgba(0,0,0,0.00)                ${Math.round(DARK_OUTER_STOP*100)}%,
+          rgba(0,0,0,0.85) 0%,
+          rgba(0,0,0,0.85) 18%,
+          rgba(0,0,0,0.40) 42%,
+          rgba(0,0,0,0.00) 62%,
           rgba(0,0,0,0) 100%);
-
-        filter: blur(${DARK_SHIELD_BLUR_PX}px);
+        /* Blur is okay, but keep it modest for mobile */
+        filter: blur(${isMobile ? 10 : 16}px);
       `;
       labelWrap.appendChild(darkBacker);
+
+
 
       // Match label duration exactly (same timing as your colored aura)
       darkBacker.animate(
@@ -1242,7 +1245,9 @@
           const glow = GLOW_BASE + GLOW_PER_TICK * ticksChunk;
 
           p.style.background = `rgba(${pal.r}, ${g}, ${pal.b}, ${alpha})`;
-          p.style.boxShadow = `0 0 ${glow.toFixed(0)}px rgba(${pal.r},${g},${pal.b},${0.22 + intensity * 0.75})`;
+          if (!isMobile) {
+            p.style.boxShadow = `0 0 ${glow.toFixed(0)}px rgba(${pal.r},${g},${pal.b},${0.22 + intensity * 0.75})`;
+          }
 
           const jitter = Math.random() * JITTER_DELAY_MS;
           p.style.animationDelay = (startDelayMs + jitter).toFixed(0) + 'ms';

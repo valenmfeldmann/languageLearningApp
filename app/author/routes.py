@@ -767,15 +767,18 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
             "caption": request.form.get("caption") or "",
         }
 
-    elif b.type == "quiz_mcq":
-        payload = dict(b.payload_json or {})  # NEW object
 
+
+    elif b.type == "quiz_mcq":
+        payload = dict(b.payload_json or {})
+
+        # 1. Mode Logic (Preserved)
         mode = (request.form.get("mode") or "graded").strip()
         if mode not in ("graded", "ungraded"):
             mode = "graded"
         payload["mode"] = mode
 
-        # typed prompt
+        # 2. Typed Prompt Logic (Preserved)
         prompt_kind = (request.form.get("prompt_kind") or "text").strip()
         prompt_value = (request.form.get("prompt_value") or "").strip()
         if prompt_kind == "text":
@@ -783,13 +786,15 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
         else:
             payload["prompt"] = {"kind": prompt_kind, "value": prompt_value}
 
-        # typed choices (IMPORTANT: _value fields)
+
+
+        # 3. Choice Parsing (ENHANCED for Combined Text + Image)
         idxs = set()
         for k in request.form.keys():
             if k.startswith("choice_") and k.endswith("_value"):
                 try:
                     idxs.add(int(k.split("_")[1]))
-                except Exception:
+                except:
                     pass
         idxs = sorted(idxs)
 
@@ -797,16 +802,23 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
         for i in idxs:
             kind = (request.form.get(f"choice_{i}_kind") or "text").strip()
             value = (request.form.get(f"choice_{i}_value") or "").strip()
-            if kind == "text":
+
+            # --- THE CRITICAL FIX ---
+            # The backend MUST explicitly look for the new '_text' key
+            text_label = (request.form.get(f"choice_{i}_text") or "").strip()
+
+            if kind == "combined" or (value and text_label):
+                choices.append({"text": text_label, "image": value})
+            elif kind == "text":
                 choices.append(value)
             else:
                 choices.append({"kind": kind, "value": value})
 
-        if len(choices) < 2:
-            choices = choices + [""] * (2 - len(choices))
         payload["choices"] = choices
 
-        # multiple correct
+
+
+        # 4. Multiple Correct / Answer Index Logic (Preserved)
         raw_correct = request.form.getlist("correct_indices")
         if raw_correct:
             correct = []
@@ -829,8 +841,12 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
             payload["answer_index"] = ans
             payload.pop("correct_indices", None)
 
-        b.payload_json = payload  # MUST reassign
-        print("SAVED PAYLOAD:", b.payload_json)
+        b.payload_json = payload
+        db.session.add(b)
+        db.session.commit()
+
+
+
 
     elif b.type == "video_asset":
         b.payload_json = {

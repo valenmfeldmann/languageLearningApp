@@ -688,41 +688,54 @@
                 </div>
               </div>
 
+
               <div style="margin-top:12px;">
                 <label>Choices</label>
 
                 {% for c in choices %}
-                  {# Normalize choice into (kind, value) #}
+                  {# 1. ENHANCED: Normalize choice including the new combined format #}
+                  {% set ck = 'text' %}
+                  {% set cv = '' %}
+                  {% set ct = '' %}
+
                   {% if c is mapping %}
-                    {% set ck = c.get("kind","text") %}
-                    {% set cv = c.get("value","") %}
+                    {% if c.text and c.image %}
+                      {% set ck = 'combined' %}
+                      {% set cv = c.image %}
+                      {% set ct = c.text %}
+                    {% else %}
+                      {% set ck = c.get("kind", "text") %}
+                      {% set cv = c.get("value", "") %}
+                    {% endif %}
                   {% else %}
-                    {% set ck = "text" %}
                     {% set cv = c %}
                   {% endif %}
 
-                  <div style="border:1px solid #ddd; padding:8px; margin-top:8px; border-radius:6px;">
-                    <div class="mcq-row">
-                      <div>
-                        <label style="display:block;">Type</label>
-                        <select name="choice_{{ loop.index0 }}_kind" id="choice_kind_{{ loop.index0 }}">
-                          <option value="text"  {% if ck=="text" %}selected{% endif %}>text</option>
+                  <div style="border:1px solid rgba(255,255,255,0.1); padding:12px; margin-top:10px; border-radius:10px; background: rgba(255,255,255,0.02);">
+                    <div class="mcq-row" style="display: flex; gap: 15px; align-items: flex-start;">
+
+                      <div style="width: 130px;">
+                        <label style="display:block; margin-bottom: 4px;">Type</label>
+                        <select name="choice_{{ loop.index0 }}_kind" id="choice_kind_{{ loop.index0 }}" style="width: 100%;">
+                          <option value="text" {% if ck=="text" %}selected{% endif %}>text</option>
                           <option value="markdown" {% if ck=="markdown" %}selected{% endif %}>markdown</option>
                           <option value="image" {% if ck=="image" %}selected{% endif %}>image</option>
                           <option value="audio" {% if ck=="audio" %}selected{% endif %}>audio</option>
-                          <option value="video" {% if ck=="video" %}selected{% endif %}>video</option>
+                          <option value="combined" {% if ck=="combined" %}selected{% endif %}>text + image</option>
                         </select>
                       </div>
 
-                      <div style="flex:1;">
-                        <label style="display:block;">Value</label>
+                      <div style="flex:2;">
+                        <label style="display:block; margin-bottom: 4px;">Value / Asset Path</label>
                         <input name="choice_{{ loop.index0 }}_value"
                                id="choice_value_{{ loop.index0 }}"
                                style="width:100%;"
-                               value="{{ cv }}">
-                        <div style="margin-top:6px;">
-                          <label>Pick an uploaded asset</label><br>
-                          <select id="choice_asset_select_{{ loop.index0 }}"
+                               value="{{ cv }}"
+                               placeholder="e.g. assets/apple.jpg">
+
+                        <div style="margin-top:8px;">
+                          <label style="font-size: 11px; opacity: 0.6;">Quick Pick Asset</label><br>
+                          <select style="width: 100%; font-size: 12px; padding: 4px;"
                                   onchange="document.getElementById('choice_value_{{ loop.index0 }}').value=this.value;">
                             <option value="">(select asset)</option>
                             {{ asset_options_all(assets) }}
@@ -730,27 +743,43 @@
                         </div>
                       </div>
 
-                      <div>
-                        <label style="display:block;">Remove</label>
+                      <div style="flex:1;">
+                        <label style="display:block; margin-bottom: 4px;">Text Label</label>
+                        <input name="choice_{{ loop.index0 }}_text"
+                               style="width:100%;"
+                               value="{{ ct }}"
+                               placeholder="e.g. An Apple">
+                        <div style="margin-top: 8px; font-size: 10px; opacity: 0.5;">Only used for 'text + image' type.</div>
+                      </div>
+
+                      <div style="width: 40px; text-align: center;">
+                        <label style="display:block; margin-bottom: 4px;">Del</label>
                         <button
                           type="submit"
                           name="idx"
                           value="{{ loop.index0 }}"
                           formaction="{{ url_for('author.mcq_remove_choice_at', lesson_id=lesson.id, block_id=selected_block.id) }}"
                           formmethod="post"
+                          class="btn-danger"
+                          style="padding: 4px 10px;"
                           {% if choices|length <= 2 %}disabled{% endif %}
                         >–</button>
                       </div>
 
-                      <div>
-                        <label style="display:block;">Correct</label>
+                      <div style="width: 40px; text-align: center;">
+                        <label style="display:block; margin-bottom: 4px;">Correct</label>
                         <input type="checkbox" name="correct_indices" value="{{ loop.index0 }}"
                           {% if correct_indices is not none and (loop.index0 in correct_indices) %}checked{% endif %}>
                       </div>
+
                     </div>
                   </div>
                 {% endfor %}
               </div>
+
+
+
+
 
               <div style="margin-top:10px;">
                 <label>Single-correct answer (used only if no “Correct” boxes checked)</label><br>

@@ -5,7 +5,17 @@
     {% set k = val.get("kind", "text") %}
     {% set v = val.get("value", "") %}
 
-    {% if k == "text" %}
+    {# --- NEW: Check for combined Text + Image format --- #}
+    {% if val.get("text") and val.get("image") %}
+      <div class="combined-choice-wrapper" style="text-align: center;">
+        <img
+          src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=val.get('image')) }}"
+          alt=""
+          style="max-width: 100%; height: auto; border-radius: 8px; display: block; margin: 0 auto 6px auto;"
+        />
+        <span class="choice-text" style="display: block; font-weight: 500;">{{ val.get("text") }}</span>
+      </div>
+    {% elif k == "text" %}
       {{ v }}
     {% elif k == "markdown" %}
       <div class="markdown-body">

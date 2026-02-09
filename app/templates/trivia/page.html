@@ -65,6 +65,63 @@
     word-break: break-word;
     color: rgba(255,255,255,0.9);
   }
+
+
+
+
+  /* GRID CONTAINER */
+  .trivia-grid {
+    display: grid;
+    gap: 16px;
+    margin-top: 20px;
+    /* This uses a 2-column grid if images are present */
+    grid-template-columns: repeat(2, 1fr);
+  }
+
+  /* SYMMETRIC CARDS */
+  .choice-btn {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    width: 100%;
+    aspect-ratio: 1 / 1; /* Force perfect squares */
+    padding: 12px;
+    border-radius: 16px;
+    border: 1px solid rgba(255,255,255,0.25);
+    background: rgba(255,255,255,0.08);
+    color: white;
+    cursor: pointer;
+    overflow: hidden;
+    transition: background 0.15s, transform 0.05s;
+  }
+
+  .choice-btn:hover { background: rgba(255,255,255,0.16); }
+  .choice-btn:active { transform: scale(0.98); }
+
+  /* SYMMETRIC IMAGES */
+  .choice-btn img, .choice-btn video {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 75% !important; /* Reserves space for text */
+    object-fit: cover !important; /* Crops to fill symmetrically */
+    display: block;
+    border-radius: 10px;
+    margin-bottom: 8px;
+  }
+
+  /* Ensure text labels sit at the bottom */
+  .choice-btn div, .choice-btn span {
+    margin-top: auto;
+    font-size: 0.95rem;
+    font-weight: 600;
+  }
+
+  @media (max-width: 500px) {
+    .trivia-grid { gap: 10px; }
+    .choice-btn { padding: 8px; }
+  }
+
 </style>
 
 
@@ -125,7 +182,7 @@
         </div>
 
         <!-- ANSWERS -->
-        <form method="post" action="{{ url_for('appui.trivia_answer') }}">
+        <form method="post" action="{{ url_for('appui.trivia_answer') }}" class="trivia-grid">
           <input type="hidden" name="block_id" value="{{ block.id }}">
           <input type="hidden" name="subject" value="{{ subject_code or '' }}">
           <input type="hidden" name="q" value="{{ q or '' }}">
@@ -138,6 +195,9 @@
             </button>
           {% endfor %}
         </form>
+
+
+
 
         <!-- BAD QUESTION -->
         <form method="post" action="{{ url_for('appui.trivia_bad_vote') }}" style="margin-top: 14px;">

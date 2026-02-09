@@ -10,11 +10,20 @@
 {% set mode = payload.get("mode", "graded") %}
 {% set can_submit = (attempt is defined and attempt) %}
 
+{# 1. Detection Loop: Use a namespace so the variable survives the loop #}
+{% set ns = namespace(has_visuals=False) %}
+{% for c in choices %}
+  {% if c is mapping %}
+    {% if c.get('image') or c.get('kind') == 'image' %}
+      {% set ns.has_visuals = True %}
+    {% endif %}
+  {% endif %}
+{% endfor %}
+
 {% from "lessons/macros/typed.html" import render_typed %}
 
-
 <div style="margin: 12px 0;">
-  <div style="font-weight:600; margin-bottom:6px;">
+  <div style="font-weight:600; margin-bottom:12px; font-size: 1.1rem;">
     {{ render_typed(prompt, lesson.id) }}
   </div>
 
@@ -24,43 +33,120 @@
       <input type="hidden" name="attempt_id" value="{{ attempt.id }}">
     {% endif %}
 
-    <div style="margin: 8px 0;">
+    {# 2. Grid Container: 2 columns for images, 1 column for text #}
+    <div style="
+      display: grid;
+      gap: 16px;
+      margin: 16px 0;
+      {% if ns.has_visuals %}
+        grid-template-columns: repeat(2, 1fr);
+      {% else %}
+        grid-template-columns: 1fr;
+      {% endif %}
+    ">
       {% for c in choices %}
-        <div style="margin: 12px 0;">
-          <label style="display:flex; gap:12px; align-items:flex-start; cursor:pointer; width: 100%;">
-            <input type="radio" name="choice_index" value="{{ loop.index0 }}" required style="margin-top: 6px; flex-shrink: 0;">
+        <label class="choice-label {% if ns.has_visuals %}visual-card{% endif %}">
+          <input type="radio" name="choice_index" value="{{ loop.index0 }}" required
+                 style="position: absolute; opacity: 0; width: 0; height: 0;">
 
-            {# Added min-width: 0 and overflow: hidden to prevent content from pushing past mobile bounds #}
-            <div class="choice-content" style="flex: 1; min-width: 0; overflow: hidden;">
-              {{ render_typed(c, lesson.id) }}
-            </div>
-          </label>
-        </div>
+          <div class="choice-content" style="width: 100%; min-width: 0;">
+            {{ render_typed(c, lesson.id) }}
+          </div>
+
+          {% if not ns.has_visuals %}
+            <div class="custom-radio-circle"></div>
+          {% endif %}
+        </label>
       {% endfor %}
     </div>
 
-    <button type="submit" {% if not can_submit %}disabled{% endif %}>
-      {% if mode != "no_check" %}Check{% else %}Submit{% endif %}
+    <button type="submit" class="btn primary" style="width: 100%; padding: 14px; font-weight: 700;" {% if not can_submit %}disabled{% endif %}>
+      {% if mode != "no_check" %}Check Answer{% else %}Submit{% endif %}
     </button>
 
+    {# 3. Feedback Block #}
     {% if show_feedback %}
       <div style="
           margin-top:10px;
-          padding:10px 12px;
+          padding:12px;
           border-radius:12px;
           border:1px solid rgba(233,237,247,.12);
           background: rgba(18,24,41,.75);
+          text-align: center;
         ">
         {% if quiz_correct == "1" %}
-          <span style="color: var(--ok); font-weight:700;">✓ Correct</span>
+          <span style="color: var(--ok); font-weight:700;">✅ Correct!</span>
         {% else %}
-          <span style="color: var(--danger); font-weight:700;">✗ Not quite</span>
+          <span style="color: #ff6b6b; font-weight:700;">❌ Not quite, try again.</span>
         {% endif %}
       </div>
     {% endif %}
-
-    {% if not can_submit %}
-      <div style="font-size:12px; opacity:0.7;">(preview mode)</div>
-    {% endif %}
   </form>
 </div>
+
+<style>
+  /* --- SYMMETRY ENGINE --- */
+  .choice-label {
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 10px;
+    cursor: pointer;
+    padding: 12px;
+    border: 1px solid rgba(233,237,247,.12);
+    border-radius: 16px;
+    background: rgba(18,24,41,.4);
+    text-align: center;
+    position: relative;
+    transition: all 0.2s ease;
+  }
+
+  /* Force visual choices to be perfect squares */
+  .visual-card {
+    aspect-ratio: 1 / 1;
+    overflow: hidden;
+  }
+
+  /* Symmetrically scale images to fill the top 70% of the card */
+  .visual-card img {
+    width: 100% !important;
+    height: 100% !important;
+    max-height: 70% !important; /* Reserves 30% for the text label */
+    object-fit: cover !important; /* Crops to fill the container symmetrically */
+    border-radius: 8px;
+    margin-bottom: 4px;
+  }
+
+  /* Alignment for text labels inside visual cards */
+  .visual-card .choice-text {
+    font-size: 0.9rem;
+    font-weight: 600;
+    margin-top: auto;
+    padding-bottom: 4px;
+    color: var(--text);
+  }
+
+  /* Active State highlight */
+  .choice-label:has(input:checked) {
+    border-color: var(--link) !important;
+    background: rgba(168, 199, 255, 0.1) !important;
+    box-shadow: 0 0 15px rgba(168, 199, 255, 0.15);
+    transform: scale(0.98);
+  }
+
+  /* Style for text-only radio circles */
+  .custom-radio-circle {
+    width: 18px;
+    height: 18px;
+    border: 2px solid rgba(255,255,255,0.3);
+    border-radius: 50%;
+    margin-top: 4px;
+  }
+
+  .choice-label:has(input:checked) .custom-radio-circle {
+    border-color: var(--link) !important;
+    background: var(--link);
+    box-shadow: inset 0 0 0 3px #121829;
+  }
+</style>

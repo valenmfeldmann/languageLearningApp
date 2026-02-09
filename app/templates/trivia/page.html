@@ -4,6 +4,7 @@
 {% from "lessons/macros/typed.html" import render_typed %}
 
 <style>
+  /* --- Keep your existing .dark-field and .trivia-grid styles --- */
   .dark-field {
     background: rgba(255,255,255,0.06);
     color: rgba(255,255,255,0.92);
@@ -12,20 +13,12 @@
     padding: 10px 12px;
     outline: none;
   }
-  .dark-field::placeholder { color: rgba(255,255,255,0.38); }
-  .dark-field:focus {
-    border-color: rgba(120, 200, 255, 0.55);
-    box-shadow: 0 0 0 3px rgba(120, 200, 255, 0.12);
-  }
-
-  /* GRID & SYMMETRY ENGINE */
   .trivia-grid {
     display: grid;
     gap: 16px;
     margin-top: 20px;
     grid-template-columns: repeat(2, 1fr);
   }
-
   .choice-btn {
     display: flex;
     flex-direction: column;
@@ -42,10 +35,6 @@
     overflow: hidden;
     transition: background 0.15s, transform 0.05s, opacity 0.2s;
   }
-
-  .choice-btn:hover { background: rgba(255,255,255,0.16); }
-  .choice-btn:active { transform: scale(0.98); }
-
   .choice-btn img, .choice-btn video {
     width: 100% !important;
     height: 100% !important;
@@ -54,17 +43,6 @@
     display: block;
     border-radius: 10px;
     margin-bottom: 8px;
-  }
-
-  .choice-btn div, .choice-btn span {
-    margin-top: auto;
-    font-size: 0.95rem;
-    font-weight: 600;
-  }
-
-  @media (max-width: 500px) {
-    .trivia-grid { gap: 10px; }
-    .choice-btn { padding: 8px; }
   }
 </style>
 
@@ -76,50 +54,29 @@
     <select name="subject" class="dark-field">
       <option value="">All subjects</option>
       {% for s in subjects %}
-        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>
-          {{ s.name }}
-        </option>
+        <option value="{{ s.code }}" {% if subject_code == s.code %}selected{% endif %}>{{ s.name }}</option>
       {% endfor %}
     </select>
     <input name="q" value="{{ q or '' }}" placeholder="Search..." class="dark-field">
-    <button class="dark-btn" type="submit">Search</button>
+    <button class="btn" type="submit">Search</button>
   </form>
 
   <div id="trivia-card-container">
     {% if not block %}
       <p>No trivia question available.</p>
     {% else %}
-      <div id="active-trivia-card" style="
-        border: 1px solid rgba(255,255,255,0.15);
-        border-radius: 16px;
-        padding: 24px;
-        background: rgba(0,0,0,0.45);
-        box-shadow: 0 20px 40px rgba(0,0,0,0.35);
-      ">
-        <div style="opacity: 0.65; font-size: 13px; margin-bottom: 14px;">
-          Source: <b>{{ lesson.title }}</b> ({{ lesson.code }})
-        </div>
-
+      <div id="active-trivia-card" style="border: 1px solid rgba(255,255,255,0.15); border-radius: 16px; padding: 24px; background: rgba(0,0,0,0.45); box-shadow: 0 20px 40px rgba(0,0,0,0.35);">
+        <div style="opacity: 0.65; font-size: 13px; margin-bottom: 14px;">Source: <b>{{ lesson.title }}</b></div>
         <div style="font-size: 22px; line-height: 1.4; font-weight: 500; color: #ffffff; margin-bottom: 20px;">
           {{ render_typed(block.payload_json.get("prompt", ""), lesson.id) }}
         </div>
-
         <form method="post" action="{{ url_for('appui.trivia_answer') }}" class="trivia-grid">
           <input type="hidden" name="block_id" value="{{ block.id }}">
-          <input type="hidden" name="subject" value="{{ subject_code or '' }}">
-          <input type="hidden" name="q" value="{{ q or '' }}">
           {% for c in block.payload_json.get("choices", []) %}
             <button type="button" class="choice-btn" name="choice_index" value="{{ loop.index0 }}">
               {{ render_typed(c, lesson.id) }}
             </button>
           {% endfor %}
-        </form>
-
-        <form method="post" action="{{ url_for('appui.trivia_bad_vote') }}" style="margin-top: 14px;">
-          <input type="hidden" name="block_id" value="{{ block.id }}">
-          <button type="submit" style="padding: 8px 12px; border-radius: 10px; border: 1px solid #a44; background: rgba(120,20,20,0.15); color: #ffb3b3; font-size: 13px; cursor: pointer;">
-            Vote: bad question
-          </button>
         </form>
       </div>
     {% endif %}
@@ -127,96 +84,115 @@
 
   <div id="trivia-buffer" style="display: none;"></div>
 </div>
-
 {% endblock %}
 
 {% block scripts %}
 <script>
-  let bufferReady = false;
+let bufferReady = false;
 
-  async function preloadNextQuestion() {
-    bufferReady = false;
-    try {
-      const response = await fetch(window.location.href);
-      const html = await response.text();
-      const doc = new DOMParser().parseFromString(html, 'text/html');
-      const nextCard = doc.getElementById('active-trivia-card');
-      if (nextCard) {
-        document.getElementById('trivia-buffer').innerHTML = nextCard.innerHTML;
-        bufferReady = true;
-      }
-    } catch (err) { console.error("Preload fail", err); }
-  }
+// Preload next HTML AND fetch images/audio into browser cache
+async function preloadNextQuestion() {
+  bufferReady = false;
+  const buffer = document.getElementById('trivia-buffer');
+  try {
+    const response = await fetch(window.location.href);
+    const html = await response.text();
+    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const nextCard = doc.getElementById('active-trivia-card');
 
-  document.addEventListener('click', async (e) => {
-    const btn = e.target.closest('.choice-btn');
-    if (!btn) return;
+    if (nextCard) {
+      buffer.innerHTML = nextCard.innerHTML;
 
-    e.preventDefault();
+      // DEEP PRELOAD: Force browser to fetch images in the background
+      const images = buffer.querySelectorAll('img');
+      const assets = Array.from(images).map(img => new Promise((resolve) => {
+        const i = new Image();
+        i.onload = resolve;
+        i.onerror = resolve;
+        i.src = img.src;
+      }));
 
-    // 1. LOCK ONLY ACTIVE BUTTONS
-    // We target only buttons inside the active card so we don't accidentally
-    // disable the pre-loaded buttons in the background buffer.
-    const activeBtns = document.querySelectorAll('#active-trivia-card .choice-btn');
-    activeBtns.forEach(b => {
-      b.style.pointerEvents = 'none';
-      b.style.opacity = '0.4';
+      // Pre-fetch audio if present
+      const audios = buffer.querySelectorAll('audio source');
+      audios.forEach(src => {
+        const a = new Audio();
+        a.src = src.src;
+        a.preload = "auto";
+      });
+
+      await Promise.all(assets);
+      bufferReady = true;
+      console.log("Assets Deep Preloaded.");
+    }
+  } catch (err) { console.error("Preload fail", err); }
+}
+
+document.addEventListener('click', async (e) => {
+  const btn = e.target.closest('.choice-btn');
+  if (!btn) return;
+
+  e.preventDefault();
+
+  // 1. Lockdown UI
+  const activeBtns = document.querySelectorAll('#active-trivia-card .choice-btn');
+  activeBtns.forEach(b => {
+    b.style.pointerEvents = 'none';
+    b.style.opacity = '0.3';
+  });
+
+  const form = btn.closest('form');
+  const formData = new FormData(form);
+  formData.set('choice_index', btn.value);
+
+  try {
+    const response = await fetch(form.action, {
+      method: 'POST',
+      body: formData,
+      headers: { 'X-Requested-With': 'XMLHttpRequest' }
+    });
+    const result = await response.json();
+
+    // 2. Celebration
+    if (result.is_correct && typeof rewardFX === 'function') {
+      rewardFX(result.payout);
+    }
+
+    ['header-an-balance', 'header-an-balance2'].forEach(id => {
+      const el = document.getElementById(id);
+      if (el && result.new_balance_an) el.textContent = result.new_balance_an;
     });
 
-    const form = btn.closest('form');
-    const formData = new FormData(form);
-    formData.set('choice_index', btn.value);
+    // 3. SWAP & CLEANUP
+    setTimeout(() => {
+      const activeCard = document.getElementById('active-trivia-card');
+      const buffer = document.getElementById('trivia-buffer');
 
-    try {
-      const response = await fetch(form.action, {
-        method: 'POST',
-        body: formData,
-        headers: { 'X-Requested-With': 'XMLHttpRequest' }
-      });
-      const result = await response.json();
+      // RESET SCREEN BRIGHTNESS: Delete any reward overlays from base.html
+      document.querySelectorAll('.reward-overlay').forEach(el => el.remove());
 
-      // 2. Feedbacks & Balance Updates
-      if (result.is_correct && typeof rewardFX === 'function') {
-        rewardFX(result.payout);
-      }
+      if (bufferReady && buffer.innerHTML.trim() !== "") {
+        activeCard.innerHTML = buffer.innerHTML;
+        buffer.innerHTML = "";
 
-      ['header-an-balance', 'header-an-balance2'].forEach(id => {
-        const el = document.getElementById(id);
-        if (el && result.new_balance_an) el.textContent = result.new_balance_an;
-      });
-
-      // 3. Swap and Clean up
-      // 400ms delay ensures the user sees the confetti/glow before the swap
-      setTimeout(() => {
-        const activeCard = document.getElementById('active-trivia-card');
-        const buffer = document.getElementById('trivia-buffer');
-
-        // AGGRESSIVE CLEANUP: Remove any dimming overlays from base.html
-        document.querySelectorAll('.reward-overlay').forEach(el => el.remove());
-
-        if (bufferReady && buffer.innerHTML.trim() !== "") {
-          activeCard.innerHTML = buffer.innerHTML;
-          buffer.innerHTML = "";
-
-          // Play audio for the new question
-          const newAudio = activeCard.querySelector('audio');
-          if (newAudio) {
-            setTimeout(() => newAudio.play().catch(() => {}), 50);
-          }
-
-          preloadNextQuestion();
-        } else {
-          window.location.reload();
+        // Autoplay fresh question
+        const newAudio = activeCard.querySelector('audio');
+        if (newAudio) {
+          setTimeout(() => newAudio.play().catch(() => {}), 50);
         }
-      }, 450);
 
-    } catch (err) { window.location.reload(); }
-  });
+        preloadNextQuestion();
+      } else {
+        window.location.reload();
+      }
+    }, 450); // Delay gives user time to see their success
 
-  window.addEventListener('DOMContentLoaded', () => {
-    preloadNextQuestion();
-    const firstAudio = document.querySelector('#active-trivia-card audio');
-    if (firstAudio) firstAudio.play().catch(() => {});
-  });
+  } catch (err) { window.location.reload(); }
+});
+
+window.addEventListener('DOMContentLoaded', () => {
+  preloadNextQuestion();
+  const firstAudio = document.querySelector('#active-trivia-card audio');
+  if (firstAudio) firstAudio.play().catch(() => {});
+});
 </script>
 {% endblock %}

@@ -305,6 +305,7 @@ def curriculum_unstar(curriculum_id: str):
 from sqlalchemy import or_, case
 
 @bp.get("/app")
+@login_required  # This decorator ensures current_user is authenticated
 def app_home():
     # sub_required = current_app.config.get("REQUIRE_SUBSCRIPTION", True)
     # if sub_required and not has_access(current_user):

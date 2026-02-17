@@ -553,6 +553,37 @@
     }
 
 
+    /* base.html */
+    .nav-links { display: flex; align-items: center; width: 100%; gap: 12px; }
+    .nav-group-main, .nav-group-system { display: flex; align-items: center; gap: 8px; }
+    .nav-group-system { margin-left: auto; }
+    .nav-author-group {
+      display: flex; gap: 6px; background: rgba(255,255,255,0.03);
+      padding: 4px; border-radius: 12px; border: 1px solid var(--border);
+    }
+    .inner-divider { width: 1px; height: 14px; background: var(--border); margin: 0 4px; }
+    .nav-divider { opacity: .15; margin: 0 10px; }
+    .logout-link { opacity: 0.6; font-size: 12px; margin-left: 4px; }
+
+    @media (max-width: 768px) {
+      .nav-links {
+        flex-direction: column !important;
+        align-items: stretch !important;
+        gap: 16px !important;
+        padding: 24px !important;
+        width: calc(100% - 28px) !important;
+      }
+      .nav-group-main, .nav-group-system, .nav-author-group {
+        flex-direction: column; width: 100%; margin-left: 0;
+      }
+      .navlink, .nav-pill {
+        width: 100%; text-align: center; padding: 14px !important; font-size: 16px !important;
+      }
+      .nav-divider, .inner-divider { display: none; }
+      .highlight-blue { background: var(--link) !important; color: #000 !important; }
+      .highlight-green { background: var(--ok) !important; color: #000 !important; }
+    }
+
   </style>
 
 
@@ -831,16 +862,14 @@
         </span>
       </a>
 
+
+
+
       <input type="checkbox" id="nav-toggle" />
       <label for="nav-toggle" class="nav-hamburger">☰</label>
 
-
-
-
-
-      <nav class="nav-links" style="display: flex; align-items: center; width: 100%;">
-
-        <div style="display: flex; align-items: center; gap: 4px;">
+      <nav class="nav-links">
+        <div class="nav-group-main">
           <a class="navlink" href="{{ url_for('main.app_home') }}">Home</a>
           <a class="navlink" href="{{ url_for('appui.trivia_page') }}">Trivia</a>
           <a class="navlink" href="{{ url_for('companion.view_garden') }}">Garden</a>
@@ -852,22 +881,21 @@
           {% endif %}
         </div>
 
-        <span style="opacity:.15; margin: 0 10px;">|</span>
+        <span class="nav-divider">|</span>
 
         {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons or nav_links.author_curricula) %}
-          <div class="nav-author-group" style="display: flex; gap: 6px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; border: 1px solid var(--border);">
-            {% if nav_links.author_lessons %}<a href="{{ nav_links.author_lessons }}" class="nav-pill" style="font-size: 12px;">Lessons</a>{% endif %}
-            {% if nav_links.author_curricula %}<a href="{{ nav_links.author_curricula }}" class="nav-pill" style="font-size: 12px;">Curricula</a>{% endif %}
+          <div class="nav-author-group">
+            {% if nav_links.author_lessons %}<a href="{{ nav_links.author_lessons }}" class="nav-pill">Lessons</a>{% endif %}
+            {% if nav_links.author_curricula %}<a href="{{ nav_links.author_curricula }}" class="nav-pill">Curricula</a>{% endif %}
 
-            <div style="width: 1px; background: var(--border); margin: 4px 2px;"></div>
+            <div class="inner-divider"></div>
 
-            {% if nav_links.new_lesson %}<a href="{{ nav_links.new_lesson }}" class="nav-pill" style="background: var(--link); color: #000;">+ Lesson</a>{% endif %}
-            {% if nav_links.new_curriculum %}<a href="{{ nav_links.new_curriculum }}" class="nav-pill" style="background: var(--ok); color: #000;">+ Curriculum</a>{% endif %}
+            {% if nav_links.new_lesson %}<a href="{{ nav_links.new_lesson }}" class="nav-pill highlight-blue">+ Lesson</a>{% endif %}
+            {% if nav_links.new_curriculum %}<a href="{{ nav_links.new_curriculum }}" class="nav-pill highlight-green">+ Curriculum</a>{% endif %}
           </div>
         {% endif %}
 
-        <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
-
+        <div class="nav-group-system">
           {% if require_subscription %}
             <a class="navlink small" href="{{ url_for('billing.pricing') }}">Pricing</a>
             {% if current_user.is_authenticated %}
@@ -880,11 +908,10 @@
           {% if current_user.is_authenticated %}
             <div class="userpill">
                 {% if current_user.current_streak > 0 %}
-                  <span style="display: flex; align-items: center; gap: 4px; margin-right: 4px;" title="Daily Streak">
-                      <span class="{% if current_user.current_streak >= 7 %}high-streak{% endif %}" style="filter: drop-shadow(0 0 5px orange);">🔥</span>
-                      <span style="font-weight: 800; color: #ffca28;">{{ current_user.current_streak }}</span>
+                  <span class="streak-tag {% if current_user.current_streak >= 7 %}high-streak{% endif %}" title="Daily Streak">
+                      🔥 {{ current_user.current_streak }}
                   </span>
-                  <div style="width: 1px; height: 14px; background: var(--border); margin: 0 4px;"></div>
+                  <div class="inner-divider"></div>
                 {% endif %}
 
                 <span id="header-an-balance2" style="font-weight: bold; color: var(--ok);">
@@ -892,10 +919,13 @@
                 </span>
             </div>
 
-            <a href="{{ url_for('auth.logout') }}" style="opacity: 0.6; font-size: 12px; margin-left: 4px;">Logout</a>
+            <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
           {% endif %}
+
+          <a class="navlink small" href="{{ url_for('main.thanks_page') }}">Thanks</a>
         </div>
       </nav>
+
 
 
 

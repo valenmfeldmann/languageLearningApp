@@ -178,6 +178,9 @@ document.addEventListener('click', async (e) => {
     // 2. CELEBRATION
     if (result.is_correct && typeof rewardFX === 'function') {
       rewardFX(result.payout);
+    } else {
+        // TRIGGER THE RED FLASH MANUALLY FOR AJAX
+        if (typeof damageFX === 'function') damageFX();
     }
 
     ['header-an-balance', 'header-an-balance2'].forEach(id => {

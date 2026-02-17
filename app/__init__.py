@@ -7,7 +7,7 @@ load_dotenv()
 from app import models
 from .config import Config
 from .extensions import db, migrate, login_manager, oauth
-from .models import User
+from .models import User, Character
 from .extensions import login_manager
 from .auth.routes import bp as auth_bp
 
@@ -126,6 +126,17 @@ def create_app():
     from flask import request
     from app.access_ledger.service import get_user_an_balance_ticks, AN_SCALE
     from .access_ledger.service import DAILY_TAX_AN
+
+    from app.companion.routes import bp as companion_bp
+    app.register_blueprint(companion_bp)
+
+    @app.context_processor
+    def inject_companion():
+        if current_user.is_authenticated:
+            # Pull the current live dog for the favicon and nav
+            dog = Character.query.filter_by(user_id=current_user.id, is_alive=True).first()
+            return dict(dog=dog)
+        return dict(dog=None)
 
     @app.context_processor
     def inject_wallet_banner():

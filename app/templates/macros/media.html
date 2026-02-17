@@ -1,0 +1,15 @@
+{% macro render_media(url, alt_text="", style="", classes="") %}
+    {% set ext = url.split('.')[-1].lower() if '.' in url else 'png' %}
+    {% if ext in ['mp4', 'webm'] %}
+        <video src="{{ url }}" 
+               style="{{ style }}" 
+               class="{{ classes }}" 
+               autoplay loop muted playsinline>
+        </video>
+    {% else %}
+        <img src="{{ url }}" 
+             alt="{{ alt_text }}" 
+             style="{{ style }}" 
+             class="{{ classes }}">
+    {% endif %}
+{% endmacro %}

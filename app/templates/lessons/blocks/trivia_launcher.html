@@ -1,0 +1,15 @@
+{# Template for the Trivia Launcher block #}
+{% set p = b.payload_json or {} %}
+<div class="panel-like trivia-launcher-card"
+     style="padding: 24px; text-align: center; border: 1px solid rgba(168,199,255,0.3); border-radius: 16px; background: rgba(168,199,255,0.05); margin: 20px 0;">
+    <div style="font-size: 40px; margin-bottom: 12px;">🏆</div>
+    <h3 style="margin-top: 0; color: var(--link);">{{ p.get("title", "Knowledge Check") }}</h3>
+    <p class="muted" style="margin-bottom: 20px;">
+      {{ p.get("description", "Ready to test what you just learned? Launch a trivia session now.") }}
+    </p>
+
+    <a href="{{ url_for('appui.trivia_page', q=p.get('query', ''), subject=p.get('subject', '')) }}"
+       class="btn primary" style="padding: 12px 24px; font-size: 16px; text-decoration: none;">
+       Launch Trivia Session &rarr;
+    </a>
+</div>

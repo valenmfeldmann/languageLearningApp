@@ -346,6 +346,11 @@ class AccessBalance(db.Model):
 
 class User(UserMixin, db.Model):
     __tablename__ = "user"
+
+    last_login_at = db.Column(db.DateTime, default=datetime.utcnow)
+    current_login_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+
     id = db.Column(db.String, primary_key=True)
     email = db.Column(db.String, unique=True, nullable=False)
     name = db.Column(db.String)
@@ -362,6 +367,36 @@ class User(UserMixin, db.Model):
 
     access_level_mult = db.Column(db.Float, nullable=False, default=1.0)
 
+    has_seen_intro = db.Column(db.Boolean, default=False, nullable=False) # Add this
+
+    current_streak = db.Column(db.Integer, default=0, nullable=False)
+    last_activity_date = db.Column(db.Date, nullable=True) # Tracks the "Day" of activity
+
+
+class Character(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String(36), db.ForeignKey('user.id'), nullable=False)
+    name = db.Column(db.String(64), nullable=False)
+    breed_type = db.Column(db.String(32), nullable=False) # e.g., 'golden', 'pug'
+    is_alive = db.Column(db.Boolean, default=True, nullable=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+    died_at = db.Column(db.DateTime, nullable=True)
+    death_acknowledged = db.Column(db.Boolean, default=False)  # New field
+
+    # Link to garden entries
+    garden_entries = db.relationship('Garden', backref='character', lazy=True)
+
+class Plant(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    name = db.Column(db.String(64), nullable=False)
+    identifier = db.Column(db.String(32), unique=True, nullable=False) # e.g., 'neon_fern'
+
+class Garden(db.Model):
+    id = db.Column(db.Integer, primary_key=True)
+    character_id = db.Column(db.Integer, db.ForeignKey('character.id'), nullable=False)
+    plant_id = db.Column(db.Integer, db.ForeignKey('plant.id'), nullable=False)
+    level = db.Column(db.Integer, default=1, nullable=False)
+    plant = db.relationship('Plant', backref='garden_entries')
 
 
 class Plan(db.Model):
@@ -522,6 +557,7 @@ class Curriculum(db.Model):
 
 class UserCurriculumStar(db.Model):
     __tablename__ = "user_curriculum_star"
+
 
     user_id = db.Column(
         db.String,

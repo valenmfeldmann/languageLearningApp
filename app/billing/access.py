@@ -149,7 +149,7 @@ def has_access(user, at: Optional[datetime] = None) -> bool:
     if not current_app.config.get("REQUIRE_SUBSCRIPTION", True):
         return True
 
-    # 2. Fall back to the original subscription check logic
+    # 2. Fall back to the original subscription check companion
     return access_status(user, at=at).allowed
 
 

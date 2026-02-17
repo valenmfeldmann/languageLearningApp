@@ -2,9 +2,11 @@
 <html lang="en">
 <head>
   <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-  <title>{% block title %}GamifySchool (Beta){% endblock %}</title>
+  <title>{% block title %}GamifyLearning (Beta){% endblock %}</title>
   <meta name="viewport" content="width=device-width, initial-scale=1">
 
+
+  <link rel="icon" type="image/png" href="{{ url_for('static', filename='favicon.png') }}">
 
   <link rel="stylesheet" href="https://cdnjs.cloudflare.com/ajax/libs/github-markdown-css/5.2.0/github-markdown-light.min.css">
   <style>
@@ -595,6 +597,32 @@
       35% { transform: scale(var(--pulse)); filter: brightness(1.15); }
       100% { transform: scale(1); filter: brightness(1); }
     }
+
+
+    /* Damage vignette flash */
+    @keyframes damageFlash {
+        0%   { opacity: 0; }
+        15%  { opacity: 1; }
+        100% { opacity: 0; }
+    }
+
+    .damage-overlay {
+        position: fixed;
+        inset: 0;
+        pointer-events: none;
+        /* Ensure it's higher than the background and the main content */
+        z-index: 100000;
+
+        /* Vibrant radial gradient */
+        background: radial-gradient(circle, transparent 20%, rgba(255, 0, 0, 0.5) 100%);
+        box-shadow: inset 0 0 150px rgba(255, 0, 0, 0.7);
+
+        /* This adds a physical red "frame" to the screen */
+        border: 12px solid rgba(255, 0, 0, 0.3);
+
+        animation: damageFlash 0.6s ease-out forwards;
+    }
+
   </style>
 
 
@@ -612,16 +640,20 @@
     }
 
     /* Background gradient layer that always covers the page */
-    body::before{
-      content:"";
-      position: fixed;
+    body::before {
+      content: "";
+      position: fixed; /* Keep it fixed so it doesn't move when you scroll */
       inset: 0;
       z-index: -1;
+      width: 100vw;
+      height: 100vh; /* Ensure it covers exactly the viewport */
       background:
         radial-gradient(900px 700px at 70% 20%, rgba(16,185,129,0.18), transparent 60%),
         radial-gradient(800px 600px at 20% 80%, rgba(59,130,246,0.14), transparent 60%),
         linear-gradient(180deg, rgba(255,255,255,0.04), rgba(255,255,255,0.00));
+      background-color: #070a0f; /* This solid fallback ensures no white space at the bottom */
     }
+
   </style>
 
   <style>
@@ -730,6 +762,22 @@
   </style>
 
 
+  <style>
+    /* */
+    /* --- Reward and Streak Visuals --- */
+    @keyframes flamePulse {
+      0%   { transform: scale(1); filter: drop-shadow(0 0 5px orange); }
+      50%  { transform: scale(1.1); filter: drop-shadow(0 0 12px red); }
+      100% { transform: scale(1); filter: drop-shadow(0 0 5px orange); }
+    }
+
+    .high-streak {
+      display: inline-block; /* Essential for transform/scale to work */
+      animation: flamePulse 2s infinite ease-in-out;
+    }
+  </style>
+
+
 
   {% block head %}{% endblock %}
 </head>
@@ -746,142 +794,110 @@
   {# Flash messages as toasts #}
   {% with messages = get_flashed_messages(with_categories=true) %}
     {% if messages %}
-      <div class="toasts" aria-live="polite" aria-atomic="true">
-        {% for category, msg in messages %}
-          {# map common flask categories to nice styles #}
-          {% set c = (category or "")|lower %}
-          {% set cls = "toast" %}
-          {% if "success" in c or "ok" in c %}
-            {% set cls = cls ~ " success" %}
-          {% elif "error" in c or "danger" in c %}
-            {% set cls = cls ~ " error" %}
-          {% elif "warn" in c %}
-            {% set cls = cls ~ " warning" %}
-          {% endif %}
 
-          {% set ticks = none %}
-          {% if c.startswith("reward:") %}
-            {% set ticks = (c.split(":", 1)[1] | int) %}
-            {% set cls = "toast success reward" %}
-          {% endif %}
+      {# Persistent container for the MutationObserver #}
+      <div id="main-toast-container" class="toasts" aria-live="polite" aria-atomic="true">
+        {% with messages = get_flashed_messages(with_categories=true) %}
+          {% if messages %}
+            {% for category, msg in messages %}
+              {% set c = (category or "")|lower %}
+              {% set cls = "toast" %}
+              {% if "error" in c or "danger" in c %}{% set cls = cls ~ " error" %}
+              {% elif "success" in c %}{% set cls = cls ~ " success" %}{% endif %}
 
-          <div class="{{ cls }}" {% if ticks is not none %}data-reward-ticks="{{ ticks }}"{% endif %}>
-            <div class="badge"></div>
-            <div class="msg">{{ msg }}</div>
-          </div>
-        {% endfor %}
+              <div class="{{ cls }}">
+                <div class="badge"></div>
+                <div class="msg">{{ msg }}</div>
+              </div>
+            {% endfor %}
+          {% endif %}
+        {% endwith %}
       </div>
+
+
     {% endif %}
   {% endwith %}
 
   <header>
     <div class="topbar">
       <a class="brand" href="{{ url_for('main.app_home') }}">
-        <span class="brand-badge"></span>
+        <img src="{{ url_for('static', filename='favicon.png') }}"
+                 style="width: 100px; height: 100px; border-radius: 8px; object-fit: cover;">
+
         <span>
-          GamifySchool (Beta)
-          <small class="muted">by Hope students, for Hope students</small>
+          GamifyLearning (Beta)
+          <small class="muted">by Hope students</small>
+          <small class="muted">for Hope students</small>
         </span>
       </a>
 
       <input type="checkbox" id="nav-toggle" />
       <label for="nav-toggle" class="nav-hamburger">☰</label>
 
-      <nav class="nav-links">
-        <a class="navlink" href="{{ url_for('main.app_home') }}">Home</a>
-        <a class="navlink" href="{{ url_for('main.curriculum_index') }}">Curriculums</a>
-        <a class="navlink" href="{{ url_for('main.lessons_index') }}">Lessons</a>
-        {% if last_curriculum_code %}
-          <a class="navlink" href="{{ url_for('main.curriculum_view', curriculum_code=last_curriculum_code) }}">
-            Continue
-          </a>
-        {% else %}
-          <a class="navlink" href="{{ url_for('main.lessons_continue') }}">
-            Continue
-          </a>
-        {% endif %}
-        <span style="opacity:.35; padding:0 6px;">|</span>
 
-        <a class="navlink" href="{{ url_for('appui.trivia_page') }}">Trivia</a>
 
-        <a class="navlink" href="{{ url_for('appui.portfolio') }}">Portfolio</a>
-        <a class="navlink" href="{{ url_for('appui.public_ledger') }}">Ledger</a>
 
-        <span style="opacity:.35; padding:0 6px;">|</span>
 
-        {% if require_subscription %}
-          <a class="navlink" href="{{ url_for('billing.pricing') }}">Pricing</a>
-        {% endif %}
-        {% if require_subscription %}
-          {% if current_user.is_authenticated %}
-            <a class="navlink" href="{{ url_for('billing.portal') }}">Manage</a>
+      <nav class="nav-links" style="display: flex; align-items: center; width: 100%;">
+
+        <div style="display: flex; align-items: center; gap: 4px;">
+          <a class="navlink" href="{{ url_for('main.app_home') }}">Home</a>
+          <a class="navlink" href="{{ url_for('appui.trivia_page') }}">Trivia</a>
+          <a class="navlink" href="{{ url_for('companion.view_garden') }}">Garden</a>
+
+          {% if last_curriculum_code %}
+            <a class="navlink" href="{{ url_for('main.curriculum_view', curriculum_code=last_curriculum_code) }}">Continue</a>
+          {% else %}
+            <a class="navlink" href="{{ url_for('main.lessons_continue') }}">Continue</a>
           {% endif %}
-        {% endif %}
+        </div>
 
-
-
-
-        <span class="nav-divider">|</span>
+        <span style="opacity:.15; margin: 0 10px;">|</span>
 
         {% if nav_links and (nav_links.new_lesson or nav_links.new_curriculum or nav_links.author_lessons or nav_links.author_curricula) %}
-          {# Ensure this class is exactly "nav-author-group" #}
-          <div class="nav-author-group">
-            {% if nav_links.author_lessons %}
-              <a href="{{ nav_links.author_lessons }}" class="nav-pill">Manage Lessons</a>
-            {% endif %}
+          <div class="nav-author-group" style="display: flex; gap: 6px; background: rgba(255,255,255,0.03); padding: 4px; border-radius: 12px; border: 1px solid var(--border);">
+            {% if nav_links.author_lessons %}<a href="{{ nav_links.author_lessons }}" class="nav-pill" style="font-size: 12px;">Lessons</a>{% endif %}
+            {% if nav_links.author_curricula %}<a href="{{ nav_links.author_curricula }}" class="nav-pill" style="font-size: 12px;">Curricula</a>{% endif %}
 
-            {% if nav_links.author_curricula %}
-              <a href="{{ nav_links.author_curricula }}" class="nav-pill">Manage Curricula</a>
-            {% endif %}
+            <div style="width: 1px; background: var(--border); margin: 4px 2px;"></div>
 
-            {% if nav_links.new_lesson %}
-              <a href="{{ nav_links.new_lesson }}" class="nav-pill">+ Lesson</a>
-            {% endif %}
-            {% if nav_links.new_curriculum %}
-              <a href="{{ nav_links.new_curriculum }}" class="nav-pill">+ Curriculum</a>
-            {% endif %}
+            {% if nav_links.new_lesson %}<a href="{{ nav_links.new_lesson }}" class="nav-pill" style="background: var(--link); color: #000;">+ Lesson</a>{% endif %}
+            {% if nav_links.new_curriculum %}<a href="{{ nav_links.new_curriculum }}" class="nav-pill" style="background: var(--ok); color: #000;">+ Curriculum</a>{% endif %}
           </div>
         {% endif %}
 
+        <div style="margin-left: auto; display: flex; align-items: center; gap: 12px;">
 
-        <span class="nav-divider">|</span>
+          {% if require_subscription %}
+            <a class="navlink small" href="{{ url_for('billing.pricing') }}">Pricing</a>
+            {% if current_user.is_authenticated %}
+              <a class="navlink small" href="{{ url_for('billing.portal') }}">Manage</a>
+            {% endif %}
+          {% endif %}
 
+          <a class="navlink small" href="{{ url_for('appui.account') }}" title="Account Settings">⚙️</a>
 
+          {% if current_user.is_authenticated %}
+            <div class="userpill">
+                {% if current_user.current_streak > 0 %}
+                  <span style="display: flex; align-items: center; gap: 4px; margin-right: 4px;" title="Daily Streak">
+                      <span class="{% if current_user.current_streak >= 7 %}high-streak{% endif %}" style="filter: drop-shadow(0 0 5px orange);">🔥</span>
+                      <span style="font-weight: 800; color: #ffca28;">{{ current_user.current_streak }}</span>
+                  </span>
+                  <div style="width: 1px; height: 14px; background: var(--border); margin: 0 4px;"></div>
+                {% endif %}
 
+                <span id="header-an-balance2" style="font-weight: bold; color: var(--ok);">
+                    {{ "%.3f"|format(an_balance_an) }} AN
+                </span>
+            </div>
 
-        <span style="opacity:.35; padding:0 6px;">|</span>
-
-
-        <a class="navlink" href="{{ url_for('appui.account') }}">Account</a>
-
-
-        {% if current_user.is_authenticated %}
-          <span class="userpill" title="{{ current_user.email }}">
-              <span class="dot"></span>
-              <span id="header-an-balance2" style="margin-right: 8px; font-weight: bold; color: var(--ok);">
-                  {{ "%.3f"|format(an_balance_an) }} AN
-              </span>
-              {{ current_user.email }}
-          </span>
-
-          <a href="{{ url_for('auth.logout') }}"
-             style="
-               margin-left: 12px;
-               opacity: 0.8;
-               text-decoration: none;
-               font-size: 14px;
-             ">
-            Logout
-          </a>
-
-        {% endif %}
-
-        <span style="opacity:.35; padding:0 6px;">|</span>
-
-        <a class="navlink" href="{{ url_for('main.thanks_page') }}">Thanks</a>
-
-
+            <a href="{{ url_for('auth.logout') }}" style="opacity: 0.6; font-size: 12px; margin-left: 4px;">Logout</a>
+          {% endif %}
+        </div>
       </nav>
+
+
 
       {% if an_warn %}
         <div class="header-warning-banner">
@@ -988,6 +1004,10 @@
         { r: 255, gLo: 175, gHi: 220, b: 120 }, // warm yellow
         { r: 200, gLo: 160, gHi: 220, b: 255 }, // icy
       ];
+
+
+      // Path to your new sound effect
+      const CHIME_URL = "{{ url_for('static', filename='assets/sounds/chime.wav') }}";
 
       // =========================
       // Helpers
@@ -1286,17 +1306,74 @@
 
         const startDelay = LABEL_FADE_IN_MS + (i * WRAP_START_SPACING_MS);
         spawnBurst(chunk, startDelay, i);
+
+        setTimeout(() => {
+          const chime = new Audio(CHIME_URL);
+          chime.volume = 0.35; // Adjust volume as needed (0.0 to 1.0)
+          chime.play().catch(e => console.log("Audio play blocked:", e));
+        }, startDelay);
       }
 
       setTimeout(() => overlay.remove(), labelTotalMs + 120);
     }
 
-    window.addEventListener('DOMContentLoaded', () => {
-      document.querySelectorAll('.toast[data-reward-ticks]').forEach(t => {
-        const ticks = parseInt(t.getAttribute('data-reward-ticks') || '0', 10);
-        if (ticks > 0) rewardFX(ticks);
-      });
+    // Negative feedback FX
+    function damageFX() {
+        const overlay = document.createElement('div');
+        overlay.className = 'damage-overlay';
+        document.body.appendChild(overlay);
+
+        // TARGET THE MAIN CONTAINER INSTEAD OF THE BODY
+        const mainContent = document.querySelector('main');
+        if (mainContent) {
+            mainContent.style.transition = 'transform 0.05s';
+            mainContent.style.transform = 'translateX(10px)';
+
+            setTimeout(() => { mainContent.style.transform = 'translateX(-10px)'; }, 50);
+            setTimeout(() => {
+                // Reset transform specifically for the main container
+                mainContent.style.transform = 'translateX(0)';
+            }, 100);
+        }
+
+        setTimeout(() => { overlay.remove(); }, 700);
+    }
+
+
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const toastContainer = document.getElementById('main-toast-container');
+        if (!toastContainer) return;
+
+        // 1. Define the Watcher
+        const toastObserver = new MutationObserver((mutations) => {
+            mutations.forEach((mutation) => {
+                mutation.addedNodes.forEach((node) => {
+                    // nodeType 1 = Element (ignores whitespace/text nodes)
+                    if (node.nodeType === 1 && node.classList.contains('toast')) {
+                        console.log("Watcher: Toast Added", node.className);
+
+                        if (node.hasAttribute('data-reward-ticks')) {
+                            rewardFX(node.getAttribute('data-reward-ticks'));
+                        }
+                        if (node.classList.contains('error')) {
+                            damageFX();
+                        }
+                    }
+                });
+            });
+        });
+
+        // 2. Start watching
+        toastObserver.observe(toastContainer, { childList: true });
+
+        // 3. Check for initial toasts (using the correct variable name)
+        toastContainer.querySelectorAll('.toast').forEach(t => {
+            if (t.hasAttribute('data-reward-ticks')) rewardFX(t.getAttribute('data-reward-ticks'));
+            if (t.classList.contains('error')) damageFX();
+        });
     });
+
   </script>
 
 

@@ -1,0 +1,37 @@
+{% extends "base.html" %}
+
+{% block content %}
+<div style="max-width: 600px; margin: 80px auto; text-align: center; padding: 40px; background: rgba(255,255,255,0.03); border-radius: 24px; border: 1px solid var(--border); animation: fadeIn 0.8s ease-out;">
+    
+    <div style="margin-bottom: 30px;">
+        {# Dexter's current pose #}
+        <img src="{{ url_for('static', filename=stage_data.image) }}" 
+             alt="Dexter"
+             style="width: 200px; height: auto; filter: drop-shadow(0 10px 20px rgba(0,0,0,0.3));">
+    </div>
+
+    <p style="font-size: 1.4rem; line-height: 1.6; color: var(--text); margin-bottom: 40px; min-height: 80px;">
+        "{{ stage_data.text }}"
+    </p>
+
+    <form action="{{ url_for('companion.welcome_next', current_stage=stage) }}" method="POST">
+        <button type="submit" class="btn primary" style="padding: 14px 40px; font-size: 1.1rem; border-radius: 12px;">
+            {{ stage_data.btn }}
+        </button>
+    </form>
+
+    {# Progress dots #}
+    <div style="display: flex; justify-content: center; gap: 8px; margin-top: 30px;">
+        {% for i in range(1, 4) %}
+            <div style="width: 8px; height: 8px; border-radius: 50%; background: {{ 'var(--link)' if i == stage else 'rgba(255,255,255,0.1)' }}; transition: 0.3s;"></div>
+        {% endfor %}
+    </div>
+</div>
+
+<style>
+@keyframes fadeIn {
+    from { opacity: 0; transform: translateY(10px); }
+    to { opacity: 1; transform: translateY(0); }
+}
+</style>
+{% endblock %}

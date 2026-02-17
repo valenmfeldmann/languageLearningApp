@@ -340,6 +340,7 @@
           <option value="html_safe">html_safe</option>
           <option value="callout">callout</option>
           <option value="reveal">reveal</option>
+          <option value="trivia_launcher">Trivia Launcher</option>
         </select>
         <button type="submit">Add</button>
       </form>
@@ -876,6 +877,40 @@
               <button type="submit">Save block</button>
             </div>
           </form>
+
+
+
+
+        {% elif selected_block.type == "trivia_launcher" %}
+          {% set p = selected_block.payload_json or {} %}
+          <form method="post" action="{{ url_for('author.lesson_block_update_form', lesson_id=lesson.id, block_id=selected_block.id) }}">
+
+            <div style="margin-bottom:15px;">
+              <label>Card Title</label>
+              <input name="title" style="width:100%;" value="{{ p.get('title','Knowledge Check') }}">
+            </div>
+
+            <div style="margin-bottom:15px;">
+              <label>Description Text</label>
+              <textarea name="description" rows="3" style="width:100%;">{{ p.get('description','') }}</textarea>
+            </div>
+
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 15px;">
+              <div>
+                <label>Trivia Query (q)</label>
+                <input name="query" style="width:100%;" value="{{ p.get('query','') }}" placeholder="e.g. spanish_week_1">
+              </div>
+              <div>
+                <label>Subject Filter</label>
+                <input name="subject" style="width:100%;" value="{{ p.get('subject','') }}" placeholder="e.g. spanish">
+              </div>
+            </div>
+
+            <div style="margin-top:20px;">
+              <button type="submit" class="btn primary">Save Trivia Launcher</button>
+            </div>
+          </form>
+
 
         {% endif %}
 

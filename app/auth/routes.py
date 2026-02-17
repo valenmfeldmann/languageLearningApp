@@ -4,7 +4,8 @@ from flask import Blueprint, current_app
 
 from ..billing.stripe_client import ensure_stripe_customer
 from ..extensions import oauth, db
-from ..models import User
+from ..companion.service import create_new_dog
+from ..models import User, Character
 from ..billing.signup_credit import grant_signup_credit_once
 from app.models import Subscription
 from app.extensions import db
@@ -85,8 +86,21 @@ def google_callback():
         ctx = current_app.app_context()
         threading.Thread(target=background_user_setup, args=(ctx, user.id)).start()
 
-    # 4) REDIRECT NOW (No more black screen!)
-    return redirect("/app")
+    # 4) COMPANION CHECK: Ensure they have a live dog
+    live_dog = Character.query.filter_by(user_id=user.id, is_alive=True).first()
+    if not live_dog:
+        create_new_dog(user)
+
+    # 5) SMART REDIRECT
+    if not user.has_seen_intro:
+        return redirect(url_for("companion.welcome_explainer"))
+
+    return redirect(url_for("companion.greet"))
+
+    # # 4) REDIRECT NOW (No more black screen!)
+    # return redirect("/app")
+
+
 
 
 # @bp.get("/google/callback")

@@ -170,6 +170,7 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "html_safe",
         "callout",
         "reveal",
+        "trivia_launcher",
     }
 
     for i, b in enumerate(blocks):
@@ -216,7 +217,7 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
             if not isinstance(ref, str) or not ref.startswith("assets/"):
                 raise ValueError(f"blocks[{i}] {t} requires payload.ref like 'assets/...'")
 
-    # Asset section logic preserved
+    # Asset section companion preserved
     assets = payload.get("assets", [])
     if assets is not None:
         if not isinstance(assets, list):
@@ -902,6 +903,16 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
         }
 
 
+    elif b.type == "trivia_launcher":
+        b.payload_json = {
+            "kind": "trivia_launcher",
+            "title": (request.form.get("title") or "Knowledge Check").strip(),
+            "description": (request.form.get("description") or "").strip(),
+            "query": (request.form.get("query") or "").strip(),
+            "subject": (request.form.get("subject") or "").strip(),
+        }
+
+
     else:
         # unknown type: do nothing
         pass
@@ -1175,6 +1186,14 @@ def lesson_block_add(lesson_id: str):
             "text": "",
             "open": False,  # default collapsed
         }
+    elif block_type == "trivia_launcher":
+        payload = {
+            "kind": "trivia_launcher",  # Matches your macro check
+            "title": "Knowledge Check",
+            "description": "Ready to test what you learned?",
+            "query": "",
+            "subject": ""
+        }
     else:
         payload = {}
 
@@ -1412,7 +1431,7 @@ def lesson_asset_upload(lesson_id: str):
         ref = f"assets/{filename}"
         size_bytes = target.stat().st_size
 
-        # 4. Upsert logic (Preserved)
+        # 4. Upsert companion (Preserved)
         existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
         if existing:
             existing.storage_path = str(target)
@@ -1923,7 +1942,7 @@ def curriculum_cover_remove(curriculum_id):
 @bp.post("/curriculum/<curriculum_id>/update-settings")
 @login_required
 def curriculum_update_settings(curriculum_id):
-    # Use your new permission logic
+    # Use your new permission companion
     _require_curriculum_perm(curriculum_id, need_edit=True)
 
     cur = Curriculum.query.get_or_404(curriculum_id)

@@ -59,13 +59,29 @@ def charge_daily_tax_for_user(user_id: str, day_utc: date) -> bool:
     mult = get_user_level_multiplier(user_id)
     tax_ticks = int(DAILY_TAX_TICKS * mult)
 
-    # Optional precheck to avoid raising InsufficientFunds
+    # # Optional precheck to avoid raising InsufficientFunds
+    # bal = get_balance_ticks(wallet.id, an.id)
+    # if bal < tax_ticks:
+    #     force_cancel_subscription_like_user_clicked(
+    #         user_id,
+    #         anchor=f"daily_tax_insufficient:{day_utc.isoformat()}:{user_id}",
+    #     )
+    #     return False
+
+    # Inside charge_daily_tax_for_user...
+
     bal = get_balance_ticks(wallet.id, an.id)
     if bal < tax_ticks:
-        force_cancel_subscription_like_user_clicked(
-            user_id,
-            anchor=f"daily_tax_insufficient:{day_utc.isoformat()}:{user_id}",
-        )
+        # # WE NO LONGER KICK USERS OFF THE APP - JUST MAKE THEM FEEL BAD FOR KILLING THEIR COMPANION
+        # force_cancel_subscription_like_user_clicked(
+        #     user_id,
+        #     anchor=f"daily_tax_insufficient:{day_utc.isoformat()}:{user_id}",
+        # )
+
+        # TRIGGER COMPANION DEATH
+        from ..companion.service import handle_companion_transition
+        handle_companion_transition(user_id)  # user_id is already available in this scope
+
         return False
 
     key = f"daily_tax:{day_utc.isoformat()}:{user_id}"

@@ -260,7 +260,7 @@ def request_buddy_by_email():
     if not other:
         abort(404, description="User not found")
 
-    # reuse the existing logic
+    # reuse the existing companion
     return request_buddy(other.id)
 
 

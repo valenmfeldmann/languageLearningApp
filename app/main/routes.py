@@ -311,10 +311,14 @@ def app_home():
     # if sub_required and not has_access(current_user):
     #     return redirect(url_for("billing.pricing"))
 
+    # 1. Catch first-time users before any other dashboard logic
+    if not current_user.has_seen_intro:
+        return redirect(url_for('companion.welcome_explainer'))
+
     if not has_access(current_user):
         return redirect(url_for("billing.pricing"))
 
-    # 1. Handle "Continue Watching" logic
+    # 1. Handle "Continue Watching" companion
     attempt = (
         LessonAttempt.query
         .filter_by(user_id=current_user.id, completed_at=None)

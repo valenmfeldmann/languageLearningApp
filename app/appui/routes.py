@@ -24,6 +24,7 @@ from app.access_ledger.service import (
     get_user_level_multiplier
 )
 from .. import db
+from datetime import datetime, timedelta
 
 
 
@@ -278,6 +279,10 @@ def trivia_answer():
 
     payout_ticks = 0
     if is_correct:
+
+        update_user_streak(current_user)
+        db.session.add(current_user)  # Ensure the user object is marked for saving
+
         # Pays at least 1 tick, plus Exp(mean=10 ticks)
         extra = int(random.expovariate(1 / 10.0))  # expected ~10, can be 0
         payout_ticks = 1 + max(0, extra)
@@ -317,7 +322,8 @@ def trivia_answer():
             ],
         )
     else:
-        flash(("Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""))
+        flash("Nope. Try again!", "error")
+        # flash(("Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""))
 
     db.session.commit()
 
@@ -332,7 +338,8 @@ def trivia_answer():
         return jsonify({
             "is_correct": bool(is_correct),
             "payout": payout_ticks,
-            "new_balance_an": f"{new_an:.3f}"
+            "new_balance_an": f"{new_an:.3f}",
+            "current_streak": current_user.current_streak,  # Send the new streak count
         })
 
     # flash(("Correct! " if is_correct else "Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""), "success" if is_correct else "error")
@@ -661,3 +668,23 @@ def log_event(event_name, entity_type=None, entity_id=None, props=None):
 #
 #     flash("Logged bad-question vote.", "info")
 #     return redirect(url_for("appui.trivia_page", subject=subject_code or "", q=search_text or ""))
+
+
+
+
+def update_user_streak(user):
+    """Updates the streak based on the current UTC date."""
+    today = datetime.utcnow().date()
+
+    # If they already did something today, do nothing
+    if user.last_activity_date == today:
+        return
+
+        # If their last activity was yesterday, increment the streak
+    if user.last_activity_date == today - timedelta(days=1):
+        user.current_streak += 1
+    else:
+        # If they missed a day (or it's their first time), reset to 1
+        user.current_streak = 1
+
+    user.last_activity_date = today

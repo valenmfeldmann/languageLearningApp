@@ -35,6 +35,21 @@
       <video controls preload="metadata"
              style="max-width:480px; height:auto; border-radius:10px; display:block;"
              src="{{ url_for('lessons.asset', lesson_id=lesson_id, ref=v) }}"></video>
+    {% elif k == "trivia_launcher" %}
+      <div class="panel-like trivia-launcher-card"
+           style="padding: 24px; text-align: center; border: 1px solid rgba(168,199,255,0.3); border-radius: 16px; background: rgba(168,199,255,0.05); margin: 20px 0;">
+          <div style="font-size: 40px; margin-bottom: 12px;">🏆</div>
+          <h3 style="margin-top: 0; color: var(--link);">{{ val.get("title", "Knowledge Check") }}</h3>
+          <p class="muted" style="margin-bottom: 20px;">
+            {{ val.get("description", "Ready to test what you just learned? Launch a trivia session now.") }}
+          </p>
+
+          {# Build the URL with the specific query and subject #}
+          <a href="{{ url_for('appui.trivia_page', q=val.get('query', ''), subject=val.get('subject', '')) }}"
+             class="btn primary" style="padding: 12px 24px; font-size: 16px;">
+             Launch Trivia Session &rarr;
+          </a>
+      </div>
     {% else %}
       <code>[{{ k }}]</code> {{ v }}
     {% endif %}

@@ -806,6 +806,77 @@
       display: inline-block; /* Essential for transform/scale to work */
       animation: flamePulse 2s infinite ease-in-out;
     }
+
+
+
+    .user-dropdown {
+      position: relative;
+      display: inline-block;
+      z-index: 1000;
+    }
+
+    .dropdown-menu {
+      display: none;
+      position: absolute;
+      top: calc(100% + 5px); /* Small gap for the 'floating' look */
+      right: 0;
+      min-width: 200px;
+
+      /* Glassmorphism */
+      background: rgba(16, 20, 32, 0.92);
+      backdrop-filter: blur(14px);
+      -webkit-backdrop-filter: blur(14px);
+
+      /* Themed Border */
+      border: 1px solid rgba(168, 199, 255, 0.2);
+      border-radius: 16px;
+      box-shadow: 0 15px 45px rgba(0,0,0,0.6), 0 0 20px rgba(168,199,255,0.05);
+
+      padding: 8px;
+      overflow: hidden;
+
+      /* Animation */
+      animation: dropdownFadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1);
+    }
+
+    @keyframes dropdownFadeIn {
+      from { opacity: 0; transform: translateY(8px) scale(0.98); }
+      to { opacity: 1; transform: translateY(0) scale(1); }
+    }
+
+    /* The 'Invisible Bridge' for hover safety */
+    .user-dropdown::after {
+      content: "";
+      position: absolute;
+      top: 100%;
+      left: 0;
+      width: 100%;
+      height: 15px;
+    }
+
+    .user-dropdown:hover .dropdown-menu {
+      display: block;
+    }
+
+    .dropdown-item {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      padding: 10px 14px;
+      border-radius: 10px;
+      color: var(--text);
+      font-size: 13.5px;
+      font-weight: 500;
+      transition: all 0.2s ease;
+    }
+
+    .dropdown-item:hover {
+      background: rgba(168, 199, 255, 0.12);
+      color: var(--link);
+      transform: translateX(4px); /* Subtle 'nudge' on hover */
+      text-decoration: none;
+    }
+
   </style>
 
 
@@ -905,19 +976,43 @@
 
           <a class="navlink small" href="{{ url_for('appui.account') }}" title="Account Settings">⚙️</a>
 
-          {% if current_user.is_authenticated %}
-            <div class="userpill">
-                {% if current_user.current_streak > 0 %}
-                  <span class="streak-tag {% if current_user.current_streak >= 7 %}high-streak{% endif %}" title="Daily Streak">
-                      🔥 {{ current_user.current_streak }}
-                  </span>
-                  <div class="inner-divider"></div>
-                {% endif %}
 
-                <span id="header-an-balance2" style="font-weight: bold; color: var(--ok);">
-                    {{ "%.3f"|format(an_balance_an) }} AN
-                </span>
+          {% if current_user.is_authenticated %}
+
+
+            <div class="user-dropdown">
+              <div class="userpill" style="cursor: pointer; transition: border-color 0.2s;">
+                  {% if current_user.current_streak > 0 %}
+                    <span class="streak-tag {% if current_user.current_streak >= 7 %}high-streak{% endif %}" title="Daily Streak">
+                        🔥 {{ current_user.current_streak }}
+                    </span>
+                    <div class="inner-divider"></div>
+                  {% endif %}
+
+                  <span id="header-an-balance2" style="font-weight: bold; color: var(--ok);">
+                      {{ "%.3f"|format(an_balance_an) }} AN
+                  </span>
+                  <span style="font-size: 9px; margin-left: 6px; opacity: 0.4; transition: transform 0.2s;">▼</span>
+              </div>
+
+              <div class="dropdown-menu">
+                  <div style="padding: 6px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); opacity: 0.6;">Finance</div>
+                  <a href="{{ url_for('appui.portfolio') }}" class="dropdown-item">
+                    <span style="font-size: 16px;">📊</span> Portfolio
+                  </a>
+                  <a href="{{ url_for('appui.public_ledger') }}" class="dropdown-item">
+                    <span style="font-size: 16px;">📜</span> Public Ledger
+                  </a>
+
+                  <div style="height: 1px; background: var(--border); margin: 6px 4px;"></div>
+
+                  <div style="padding: 6px 14px; font-size: 11px; text-transform: uppercase; letter-spacing: 1px; color: var(--muted); opacity: 0.6;">Settings</div>
+                  <a href="{{ url_for('appui.account') }}" class="dropdown-item">
+                    <span style="font-size: 16px;">⚙️</span> Account Settings
+                  </a>
+              </div>
             </div>
+
 
             <a href="{{ url_for('auth.logout') }}" class="logout-link">Logout</a>
           {% endif %}

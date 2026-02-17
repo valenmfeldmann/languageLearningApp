@@ -139,26 +139,29 @@ async function preloadNextQuestion() {
 
 
 
+// page.html
+
+// 1. SINGLETON INSTANTIATION (Outside the click handler)
+// Creating this once prevents the mobile browser from re-loading the file every click.
+const CHIME_EFFECT = new Audio("{{ url_for('static', filename='assets/sounds/chime.wav') }}");
+CHIME_EFFECT.preload = "auto";
+CHIME_EFFECT.volume = 0.35;
+
 document.addEventListener('click', async (e) => {
   const btn = e.target.closest('.choice-btn');
   if (!btn) return;
 
   e.preventDefault();
 
-  // --- 1. INSTANT AUDIO PRE-WARMING (The Mobile Lag Fix) ---
-  // We create and "touch" the chime immediately during the synchronous click event.
-  // This authorizes the browser to play it instantly later in the async block.
-  const chime = new Audio("{{ url_for('static', filename='assets/sounds/chime.wav') }}");
-  chime.volume = 0;
-  chime.play().then(() => {
-    chime.pause();
-    chime.volume = 0.35; // Set ready for audible playback
-    chime.currentTime = 0;
-  }).catch(() => {
-    /* Silent catch for browsers that strictly require more interaction */
-  });
+  // --- 2. SYNCHRONOUS WARM-UP ---
+  // Mobile browsers require an "explicit touch" to enable audio.
+  // We play and immediately pause to 'wake up' the audio channel for this session.
+  CHIME_EFFECT.play().then(() => {
+    CHIME_EFFECT.pause();
+    CHIME_EFFECT.currentTime = 0;
+  }).catch(() => {});
 
-  // --- 2. EXISTING TRIVIA AUDIO PRIMING ---
+  // Prime existing trivia card audio (if any)
   const currentAudio = document.querySelector('#active-trivia-card audio');
   if (currentAudio) {
     currentAudio.pause();
@@ -184,10 +187,11 @@ document.addEventListener('click', async (e) => {
     });
     const result = await response.json();
 
-    // --- 4. CELEBRATION & FEEDBACK ---
+    // --- 4. INSTANT CELEBRATION ---
     if (result.is_correct) {
-      // Trigger chime at the EXACT same millisecond as rewardFX
-      chime.play().catch(err => console.log("Audio play blocked:", err));
+
+      // Haptic Feedback (Optional: gives a physical 'pop' on Android/iOS)
+      if (window.navigator.vibrate) window.navigator.vibrate(40);
 
       if (typeof rewardFX === 'function') {
         rewardFX(result.payout);
@@ -195,6 +199,7 @@ document.addEventListener('click', async (e) => {
     } else {
       if (typeof damageFX === 'function') {
         damageFX();
+        if (window.navigator.vibrate) window.navigator.vibrate([50, 50, 50]);
       }
     }
 
@@ -205,19 +210,17 @@ document.addEventListener('click', async (e) => {
     });
 
     // --- 5. THE SWAP ---
-    // 800ms delay allows the confetti and "+ ticks" label to be appreciated
     setTimeout(() => {
       const activeCard = document.getElementById('active-trivia-card');
       const buffer = document.getElementById('trivia-buffer');
 
-      // Cleanup any reward overlays before swapping
       document.querySelectorAll('.reward-overlay').forEach(el => el.remove());
 
       if (bufferReady && buffer.innerHTML.trim() !== "") {
         activeCard.innerHTML = buffer.innerHTML;
         buffer.innerHTML = "";
 
-        // Autoplay the fresh question audio
+        // Autoplay fresh question audio
         const newAudio = activeCard.querySelector('audio');
         if (newAudio) {
           newAudio.play().catch(err => console.log("Autoplay blocked:", err));
@@ -225,7 +228,6 @@ document.addEventListener('click', async (e) => {
 
         preloadNextQuestion();
       } else {
-        // Fallback: if buffer isn't ready, reload the page to get a fresh card
         window.location.reload();
       }
     }, 800);
@@ -235,7 +237,6 @@ document.addEventListener('click', async (e) => {
     window.location.reload();
   }
 });
-
 
 window.addEventListener('DOMContentLoaded', () => {
   preloadNextQuestion();

@@ -283,9 +283,22 @@ def trivia_answer():
         update_user_streak(current_user)
         db.session.add(current_user)  # Ensure the user object is marked for saving
 
-        # Pays at least 1 tick, plus Exp(mean=10 ticks)
-        extra = int(random.expovariate(1 / 10.0))  # expected ~10, can be 0
-        payout_ticks = 1 + max(0, extra)
+        if is_correct:
+            # 1. Detect if it's a mobile device
+            user_agent = request.headers.get('User-Agent', '').lower()
+            is_mobile = any(word in user_agent for word in ['mobile', 'android', 'iphone'])
+
+            # 2. Logic: Same expected value (~11 ticks), but capped for UI safety
+            if is_mobile:
+                # We use a tighter distribution that still skews high occasionally
+                # Capping at 20 ticks prevents layout breaks in the userpill
+                raw_extra = int(random.expovariate(1 / 10.0))
+                payout_ticks = 1 + min(19, raw_extra)
+            else:
+                # Standard uncapped desktop logic
+                extra = int(random.expovariate(1 / 10.0))
+                payout_ticks = 1 + max(0, extra)
+
 
         # today = datetime.utcnow().date().isoformat()
         # key = f"trivia_reward:{current_user.id}:{block.id}:{today}"

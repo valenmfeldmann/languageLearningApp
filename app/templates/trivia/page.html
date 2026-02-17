@@ -190,6 +190,10 @@ document.addEventListener('click', async (e) => {
     // --- 4. INSTANT CELEBRATION ---
     if (result.is_correct) {
 
+      // TRIGGER THE SOUND HERE (This is the one you were missing!)
+      CHIME_EFFECT.currentTime = 0;
+      CHIME_EFFECT.play().catch(err => console.log("Audio play blocked:", err));
+
       // Haptic Feedback (Optional: gives a physical 'pop' on Android/iOS)
       if (window.navigator.vibrate) window.navigator.vibrate(40);
 

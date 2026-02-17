@@ -1337,11 +1337,6 @@
         const startDelay = LABEL_FADE_IN_MS + (i * WRAP_START_SPACING_MS);
         spawnBurst(chunk, startDelay, i);
 
-        setTimeout(() => {
-          const chime = new Audio(CHIME_URL);
-          chime.volume = 0.35; // Adjust volume as needed (0.0 to 1.0)
-          chime.play().catch(e => console.log("Audio play blocked:", e));
-        }, startDelay);
       }
 
       setTimeout(() => overlay.remove(), labelTotalMs + 120);
@@ -1384,6 +1379,11 @@
                         console.log("Watcher: Toast Added", node.className);
 
                         if (node.hasAttribute('data-reward-ticks')) {
+
+                            const chime = new Audio("{{ url_for('static', filename='assets/sounds/chime.wav') }}");
+                            chime.volume = 0.35;
+                            chime.play().catch(() => {});
+
                             rewardFX(node.getAttribute('data-reward-ticks'));
                         }
                         if (node.classList.contains('error')) {

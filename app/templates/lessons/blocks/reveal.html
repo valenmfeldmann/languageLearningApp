@@ -7,8 +7,9 @@
 <details class="ll-reveal" {% if open_default %}open{% endif %}>
   <summary class="ll-reveal-summary">{{ summary }}</summary>
   <div class="ll-reveal-body" style="white-space:pre-wrap; margin-top:8px;">
-    {{ text }}
+    {{ text | markdown | safe }}
   </div>
+
 </details>
 
 <style>

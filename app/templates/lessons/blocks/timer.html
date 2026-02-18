@@ -1,0 +1,59 @@
+{% set _b = (block if block is defined else b) %}
+{% set p = _b.payload_json or {} %}
+{% set seconds = p.get("seconds", 60) %}
+
+<div class="timer-block panel-like" id="timer-{{ _b.id }}" style="text-align: center; padding: 20px;">
+    <div style="font-size: 11px; text-transform: uppercase; color: var(--muted); margin-bottom: 8px;">
+        Recommended Time: {{ seconds }}s
+    </div>
+
+    <div class="timer-display" style="font-size: 3rem; font-family: monospace; font-weight: bold; transition: color 0.3s;">
+        00:00
+    </div>
+
+    <div style="margin-top: 15px; display: flex; justify-content: center; gap: 10px;">
+        <button class="btn secondary start-btn" onclick="startTimer('{{ _b.id }}', {{ seconds }})">Start Task</button>
+        <button class="btn warn stop-btn" style="display:none;" onclick="stopTimer('{{ _b.id }}')">Stop</button>
+        <button class="btn reset-btn" style="opacity: 0.5; font-size: 12px;" onclick="resetTimer('{{ _b.id }}', {{ seconds }})">Reset</button>
+    </div>
+</div>
+
+<script>
+let intervals = {};
+function startTimer(id, target) {
+    const container = document.getElementById('timer-' + id);
+    const display = container.querySelector('.timer-display');
+    const startBtn = container.querySelector('.start-btn');
+    const stopBtn = container.querySelector('.stop-btn');
+
+    startBtn.style.display = 'none';
+    stopBtn.style.display = 'inline-block';
+
+    let elapsed = 0;
+    intervals[id] = setInterval(() => {
+        elapsed++;
+        let mins = Math.floor(elapsed / 60);
+        let secs = elapsed % 60;
+        display.innerText = `${mins.toString().padStart(2, '0')}:${secs.toString().padStart(2, '0')}`;
+
+        if (elapsed > target) {
+            display.style.color = 'var(--danger)';
+            display.classList.add('pulse-timer'); // You can add a CSS animation for this
+        }
+    }, 1000);
+}
+
+function stopTimer(id) {
+    clearInterval(intervals[id]);
+    const container = document.getElementById('timer-' + id);
+    container.querySelector('.start-btn').style.display = 'inline-block';
+    container.querySelector('.stop-btn').style.display = 'none';
+}
+
+function resetTimer(id, target) {
+    stopTimer(id);
+    const container = document.getElementById('timer-' + id);
+    container.querySelector('.timer-display').innerText = "00:00";
+    container.querySelector('.timer-display').style.color = "var(--text)";
+}
+</script>

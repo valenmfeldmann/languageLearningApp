@@ -9,7 +9,9 @@
     <div class="ll-callout-title">{{ title }}</div>
   {% endif %}
   {% if text %}
-    <div class="ll-callout-text" style="white-space:pre-wrap;">{{ text }}</div>
+    <div class="ll-callout-text" style="white-space:pre-wrap;">
+      {{ text | markdown | safe }}
+    </div>
   {% endif %}
 </div>
 

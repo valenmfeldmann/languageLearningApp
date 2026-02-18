@@ -171,6 +171,7 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
         "callout",
         "reveal",
         "trivia_launcher",
+        "timer",
     }
 
     for i, b in enumerate(blocks):
@@ -211,6 +212,10 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
 
             if not isinstance(answer_index, int) or not (0 <= answer_index < len(choices)):
                 raise ValueError(f"blocks[{i}] quiz_mcq requires payload.answer_index (int in range)")
+
+        elif t == "timer":
+            if not isinstance(p.get("seconds"), int):
+                raise ValueError(f"blocks[{i}] timer requires payload.seconds (int)")
 
         elif t in ("video_asset", "audio_asset"):
             ref = p.get("ref")
@@ -912,6 +917,12 @@ def lesson_block_update_form(lesson_id: str, block_id: str):
             "subject": (request.form.get("subject") or "").strip(),
         }
 
+    elif b.type == "timer":
+        try:
+            sec = int(request.form.get("seconds") or "60")
+        except ValueError:
+            sec = 60
+        b.payload_json = {"seconds": sec}
 
     else:
         # unknown type: do nothing
@@ -1194,6 +1205,8 @@ def lesson_block_add(lesson_id: str):
             "query": "",
             "subject": ""
         }
+    elif block_type == "timer":
+        payload = {"seconds": 60}
     else:
         payload = {}
 

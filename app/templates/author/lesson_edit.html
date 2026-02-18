@@ -341,6 +341,7 @@
           <option value="callout">callout</option>
           <option value="reveal">reveal</option>
           <option value="trivia_launcher">Trivia Launcher</option>
+          <option value="timer">timer</option>
         </select>
         <button type="submit">Add</button>
       </form>
@@ -908,6 +909,19 @@
 
             <div style="margin-top:20px;">
               <button type="submit" class="btn primary">Save Trivia Launcher</button>
+            </div>
+          </form>
+
+
+        {% elif selected_block.type == "timer" %}
+          {% set p = selected_block.payload_json or {} %}
+          <form method="post" action="{{ url_for('author.lesson_block_update_form', lesson_id=lesson.id, block_id=selected_block.id) }}">
+            <label>Recommended Time (seconds)</label><br>
+            <input type="number" name="seconds" value="{{ p.get('seconds', 60) }}" style="width:100px;">
+            <p class="muted" style="font-size: 11px; margin-top: 5px;">The clock will turn red after this many seconds have passed.</p>
+
+            <div style="margin-top:10px;">
+              <button type="submit">Save block</button>
             </div>
           </form>
 

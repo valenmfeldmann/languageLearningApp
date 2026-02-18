@@ -165,11 +165,12 @@
 
 
   <script>
+    /* */
     async function copyLLMInstructions() {
       const status = document.getElementById("llmCopyStatus");
       status.textContent = "";
 
-      // server-rendered context → JS literals
+      // Dynamic server-rendered context -> JS literals
       const assets = {{ (assets or []) | map(attribute="ref") | list | tojson }};
       const assetTypes = {{ (assets or []) | map(attribute="content_type") | list | tojson }};
       const lessonCode = {{ (lesson.code or "") | tojson }};
@@ -179,86 +180,43 @@
       const url = "{{ url_for('static', filename='instructions_for_LLM.txt') }}";
 
       try {
+        // 1. Fetch the full static instructions from your text file
         const resp = await fetch(url, { cache: "no-store" });
         if (!resp.ok) throw new Error("Failed to load instructions (" + resp.status + ")");
-
         const baseText = await resp.text();
 
+        // 2. Format the dynamic asset list
         const assetLines = assets.length
           ? assets.map((a, i) => `- ${a} (${assetTypes[i] || "unknown"})`).join("\n")
           : "(none uploaded yet)";
 
-        // This is the “extra context” the LLM needs to produce something usable
+        // 3. Create a minimal context section for the current lesson
         const contextSection =
-    `\n\n====================
-    CONTEXT (SERVER VARIABLES)
+    `
+
     ====================
+    DYNAMIC LESSON CONTEXT
+    ====================
+    The following variables apply ONLY to the current session:
+
     lesson.code: ${lessonCode}
     lesson.title: ${lessonTitle}
     lesson.language_code: ${lessonLanguage}
 
-    You can reference uploaded assets by exact ref string (e.g. "assets/foo.png").
-    Uploaded assets:
+    UPLOADED ASSETS (Reference these exactly by string):
     ${assetLines}
-
-    ====================
-    LESSON JSON SHAPE (WHAT THE APP EXPECTS)
-    ====================
-    Top-level (example):
-    {
-      "code": "my-lesson-code",
-      "title": "My Lesson Title",
-      "description": "Optional",
-      "language_code": "es",
-      "blocks": [ ... ]
-    }
-
-    Blocks (each):
-    {
-      "type": "markdown" | "video_url" | "video_asset" | "quiz_mcq" | "desmos" | "html_safe",
-      "payload": { ... }
-    }
-
-    Block payload examples:
-
-    markdown:
-    { "text": "Markdown content..." }
-
-    video_url:
-    { "url": "https://...", "caption": "Optional" }
-
-    video_asset:
-    { "ref": "assets/video.mp4", "caption": "Optional", "controls": true, "autoplay": false }
-
-    desmos:
-    { "graph_url": "https://www.desmos.com/calculator/XXXX", "height": 480 }
-
-    quiz_mcq:
-    {
-      "mode": "graded" | "ungraded",
-      "prompt": "text" OR { "kind": "text|image|audio|video", "value": "..." },
-      "choices": [
-        "text choice"
-        OR { "kind": "text|image|audio|video", "value": "..." }
-      ],
-      "correct_indices": [0,2]   // optional multi-correct
-      // OR fallback single-correct:
-      "answer_index": 1
-    }
-
-    html_safe:
-    { "html": "<div>...</div>" }  // HTML is sanitized server-side
     `;
 
+        // 4. Combine and Copy
         const finalText = baseText + contextSection;
-
         await navigator.clipboard.writeText(finalText);
         status.textContent = "Copied.";
+
       } catch (e) {
-        // fallback
+        // Fallback for browsers with restricted clipboard access
         try {
           const ta = document.createElement("textarea");
-          ta.value = "INSTRUCTIONS URL:\n" + url + "\n\n" + (e?.message || e);
+          ta.value = (e?.message || e);
           document.body.appendChild(ta);
           ta.select();
           document.execCommand("copy");

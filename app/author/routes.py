@@ -517,6 +517,112 @@ def curricula_index():
 
     return render_template("author/curriculum_index.html", curricula=curricula)
 
+
+
+# @bp.post("/lesson/<lesson_id>/apply_json")
+# @login_required
+# def lesson_apply_json(lesson_id: str):
+#     _require_author()
+#     lesson = Lesson.query.get_or_404(lesson_id)
+#
+#     try:
+#         _require_lesson_edit_perm(lesson)
+#     except PermissionError:
+#         abort(403)
+#
+#     # Accept either: pasted JSON OR uploaded lesson.json file
+#     raw_text = (request.form.get("lesson_json_text") or "").strip()
+#     lesson_json_fs = request.files.get("lesson_json")
+#
+#     try:
+#         if raw_text:
+#             payload = json.loads(raw_text)
+#         elif lesson_json_fs and lesson_json_fs.filename:
+#             payload = _load_json_file(lesson_json_fs)
+#         else:
+#             flash("Provide lesson JSON (paste or upload lesson.json).", "error")
+#             return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#         payload = _validate_lesson_payload(payload)
+#     except Exception as e:
+#         flash(f"Invalid lesson JSON: {e}", "error")
+#         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#     # Optional: assets.zip (same as import)
+#     assets_zip_fs = request.files.get("assets_zip")
+#
+#     # Replace lesson metadata from payload (but keep lesson.id + ownership)
+#     # keep existing code; allow everything else
+#     # lesson.code = lesson.code
+#     lesson.title = payload["title"].strip()
+#     lesson.description = (payload.get("description") or None)
+#     lesson.language_code = (payload.get("language_code") or None)
+#     lesson.is_published = bool(payload.get("is_published") or False)
+#
+#     # Replace contents
+#     LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+#     LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+#     db.session.flush()
+#
+#     extracted: dict[str, tuple[str, int | None]] = {}
+#     if assets_zip_fs and assets_zip_fs.filename:
+#         try:
+#             extracted = _extract_assets_zip(assets_zip_fs, lesson.id)
+#         except Exception as e:
+#             db.session.rollback()
+#             flash(f"assets.zip failed to extract: {e}", "error")
+#             return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#     # Assets: prefer manifest if present
+#     manifest_assets = payload.get("assets") or []
+#     if manifest_assets:
+#         for a in manifest_assets:
+#             ref = a["ref"]
+#             if assets_zip_fs and assets_zip_fs.filename and ref not in extracted:
+#                 db.session.rollback()
+#                 flash(f"Asset listed in lesson.json not found in zip: {ref}", "error")
+#                 return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+#
+#             storage_path, size_bytes = extracted.get(ref, ("", None))
+#             db.session.add(
+#                 LessonAsset(
+#                     lesson_id=lesson.id,
+#                     ref=ref,
+#                     storage_path=storage_path,
+#                     content_type=a.get("content_type"),
+#                     size_bytes=size_bytes,
+#                 )
+#             )
+#     else:
+#         for ref, (storage_path, size_bytes) in extracted.items():
+#             db.session.add(
+#                 LessonAsset(
+#                     lesson_id=lesson.id,
+#                     ref=ref,
+#                     storage_path=storage_path,
+#                     content_type=None,
+#                     size_bytes=size_bytes,
+#                 )
+#             )
+#
+#     # Blocks
+#     for idx, b in enumerate(payload["blocks"]):
+#         db.session.add(
+#             LessonBlock(
+#                 lesson_id=lesson.id,
+#                 position=idx,
+#                 type=b["type"],
+#                 payload_json=b["payload"],
+#             )
+#         )
+#
+#     db.session.commit()
+#     flash("Applied lesson JSON to this lesson.", "success")
+#     return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+# app/author/routes.py
+
 @bp.post("/lesson/<lesson_id>/apply_json")
 @login_required
 def lesson_apply_json(lesson_id: str):
@@ -528,7 +634,7 @@ def lesson_apply_json(lesson_id: str):
     except PermissionError:
         abort(403)
 
-    # Accept either: pasted JSON OR uploaded lesson.json file
+    # 1. Load and Validate JSON
     raw_text = (request.form.get("lesson_json_text") or "").strip()
     lesson_json_fs = request.files.get("lesson_json")
 
@@ -546,22 +652,21 @@ def lesson_apply_json(lesson_id: str):
         flash(f"Invalid lesson JSON: {e}", "error")
         return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
-    # Optional: assets.zip (same as import)
-    assets_zip_fs = request.files.get("assets_zip")
-
-    # Replace lesson metadata from payload (but keep lesson.id + ownership)
-    # keep existing code; allow everything else
-    # lesson.code = lesson.code
+    # 2. Update Lesson Metadata
     lesson.title = payload["title"].strip()
     lesson.description = (payload.get("description") or None)
     lesson.language_code = (payload.get("language_code") or None)
     lesson.is_published = bool(payload.get("is_published") or False)
 
-    # Replace contents
+    # 3. Content Replacement: Blocks are always replaced
     LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
-    LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+    # --- CRITICAL CHANGE: Asset erasure removed ---
+    # LessonAsset.query.filter_by(lesson_id=lesson.id).delete() <--- Wiped this line
     db.session.flush()
 
+    # 4. Handle ZIP Extraction (if provided)
+    assets_zip_fs = request.files.get("assets_zip")
     extracted: dict[str, tuple[str, int | None]] = {}
     if assets_zip_fs and assets_zip_fs.filename:
         try:
@@ -571,39 +676,47 @@ def lesson_apply_json(lesson_id: str):
             flash(f"assets.zip failed to extract: {e}", "error")
             return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
-    # Assets: prefer manifest if present
+    # 5. Intelligent Asset Merging (Upsert Pattern)
     manifest_assets = payload.get("assets") or []
     if manifest_assets:
         for a in manifest_assets:
             ref = a["ref"]
-            if assets_zip_fs and assets_zip_fs.filename and ref not in extracted:
-                db.session.rollback()
-                flash(f"Asset listed in lesson.json not found in zip: {ref}", "error")
-                return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
 
-            storage_path, size_bytes = extracted.get(ref, ("", None))
-            db.session.add(
-                LessonAsset(
+            # Check if this asset already exists in the database
+            existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+            storage_path, size_bytes = extracted.get(ref, (None, None))
+
+            if existing:
+                # Update existing record ONLY if we have new file data from a zip
+                if storage_path:
+                    existing.storage_path = storage_path
+                    existing.size_bytes = size_bytes
+                existing.content_type = a.get("content_type") or existing.content_type
+            elif storage_path:
+                # Create NEW record only if a file was actually provided in the zip
+                db.session.add(LessonAsset(
                     lesson_id=lesson.id,
                     ref=ref,
                     storage_path=storage_path,
                     content_type=a.get("content_type"),
                     size_bytes=size_bytes,
-                )
-            )
+                ))
     else:
+        # Fallback: if no manifest, update/add based solely on ZIP content
         for ref, (storage_path, size_bytes) in extracted.items():
-            db.session.add(
-                LessonAsset(
+            existing = LessonAsset.query.filter_by(lesson_id=lesson.id, ref=ref).one_or_none()
+            if existing:
+                existing.storage_path = storage_path
+                existing.size_bytes = size_bytes
+            else:
+                db.session.add(LessonAsset(
                     lesson_id=lesson.id,
                     ref=ref,
                     storage_path=storage_path,
-                    content_type=None,
-                    size_bytes=size_bytes,
-                )
-            )
+                    size_bytes=size_bytes
+                ))
 
-    # Blocks
+    # 6. Re-insert Blocks
     for idx, b in enumerate(payload["blocks"]):
         db.session.add(
             LessonBlock(
@@ -615,9 +728,8 @@ def lesson_apply_json(lesson_id: str):
         )
 
     db.session.commit()
-    flash("Applied lesson JSON to this lesson.", "success")
+    flash("Applied lesson JSON to this lesson. Existing assets were preserved.", "success")
     return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
-
 
 
 @bp.get("/lessons")

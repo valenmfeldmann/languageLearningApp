@@ -2,609 +2,261 @@
 {% block title %}Edit Curriculum{% endblock %}
 
 {% block content %}
-
   <style>
     @keyframes border-glow {
       0% { box-shadow: 0 0 5px rgba(168, 199, 255, 0.2); border-color: rgba(168, 199, 255, 0.1); }
       50% { box-shadow: 0 0 20px rgba(168, 199, 255, 0.4); border-color: rgba(168, 199, 255, 0.5); }
       100% { box-shadow: 0 0 5px rgba(168, 199, 255, 0.2); border-color: rgba(168, 199, 255, 0.1); }
     }
-
-    .glow-container {
-      animation: border-glow 4s infinite ease-in-out;
-      border: 1px solid rgba(168, 199, 255, 0.1);
-      border-radius: 12px;
-      background: rgba(16, 20, 32, 0.4);
-      transition: transform 0.3s ease;
-    }
-
-    .glow-container:focus-within {
-      transform: scale(1.01); /* Subtle "lift" when you're actually editing */
-      animation: none;
-      border-color: var(--link);
-      box-shadow: 0 0 25px rgba(168, 199, 255, 0.3);
-    }
+    .glow-container { animation: border-glow 4s infinite ease-in-out; border: 1px solid rgba(168, 199, 255, 0.1); border-radius: 12px; background: rgba(16, 20, 32, 0.4); }
+    .item-row { cursor: default; border-bottom: 1px solid #222; }
+    .drag-handle { cursor: grab !important; user-select: none; color: var(--muted); padding: 10px; text-align: center; width: 40px; }
+    .drag-handle:active { cursor: grabbing !important; }
+    .item-row:hover { background: rgba(255,255,255,0.02); }
   </style>
 
-  <div style="display:flex; align-items: baseline; justify-content: space-between; gap: 12px; margin-bottom: 20px;">
-
-
-    <button type="button"
-              onclick="window.location.href='{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}'">
-        &larr; Back to curriculum view
-    </button>
-
-    <h1 style="margin:0;">Edit curriculum: {{ curriculum.title }}</h1>
-
-    <div style="display:flex; gap:12px; align-items:center;">
-<!--      <a href="{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}" style="font-size: 14px;">View</a>-->
-
-      {% if curriculum.is_archived %}
-        <span style="padding:4px 10px; border-radius:999px; background:#333; font-size:13px;">Archived</span>
-        <form method="POST" action="{{ url_for('author.curriculum_unarchive', curriculum_id=curriculum.id) }}">
-          <button type="submit">Unarchive</button>
-        </form>
-      {% else %}
-        <form method="POST" action="{{ url_for('author.curriculum_archive', curriculum_id=curriculum.id) }}"
-              onsubmit="return confirm('Archive this curriculum?');">
-          <button type="submit" style="background:#7a1e1e; color:white; border:none; padding:6px 12px; border-radius:8px;">
-            Archive
-          </button>
-        </form>
-      {% endif %}
-    </div>
+  <div style="display:flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px;">
+    <button type="button" onclick="window.location.href='{{ url_for('main.curriculum_view', curriculum_code=curriculum.code) }}'">&larr; Back to view</button>
+    <h1 style="margin:0;">Edit: {{ curriculum.title }}</h1>
+    <form method="POST" action="{{ url_for('author.curriculum_archive', curriculum_id=curriculum.id) if not curriculum.is_archived else url_for('author.curriculum_unarchive', curriculum_id=curriculum.id) }}">
+        <button type="submit" style="{{ 'background:#7a1e1e;' if not curriculum.is_archived else '' }}">{{ 'Archive' if not curriculum.is_archived else 'Unarchive' }}</button>
+    </form>
   </div>
 
-
-
-
-
-
-{# --- Start of Replace Block (Line 66) --- #}
-<form method="POST" enctype="multipart/form-data" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
-
-    <div style="
-      max-width:1100px;
-      border:1px solid rgba(255,255,255,0.18);
-      border-radius:14px;
-      padding:14px 16px;
-      margin: 12px 0 16px 0;
-      background: {% if curriculum.is_published %}rgba(0, 200, 0, 0.10){% else %}rgba(255, 80, 80, 0.10){% endif %};
-      display:flex;
-      align-items:center;
-      justify-content:space-between;
-      gap:14px;
-    ">
-      <div>
-        <div style="font-weight:800; font-size:16px;">
-          {% if curriculum.is_published %}
-            ✅ Published — visible to everyone
-          {% else %}
-            🚫 Not published — nobody will see this in Explore
-          {% endif %}
-        </div>
-        <div style="opacity:0.8; font-size:13px; margin-top:4px;">
-          Publishing controls visibility. Archiving is separate.
-        </div>
-      </div>
-
-      {% if curriculum.is_published %}
-        <button type="submit" name="publish_action" value="unpublish">Unpublish</button>
-      {% else %}
-        <button type="submit" name="publish_action" value="publish">Publish</button>
-      {% endif %}
+  <form method="POST" enctype="multipart/form-data" action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
+    <div style="max-width:1100px; border:1px solid rgba(255,255,255,0.18); border-radius:14px; padding:14px; margin-bottom:16px; background: {% if curriculum.is_published %}rgba(0, 200, 0, 0.10){% else %}rgba(255, 80, 80, 0.10){% endif %}; display:flex; justify-content:space-between; align-items:center;">
+      <div style="font-weight:800;">{% if curriculum.is_published %}✅ Published{% else %}🚫 Not published{% endif %}</div>
+      <button type="submit"
+              name="publish_action"
+              value="{{ 'unpublish' if curriculum.is_published else 'publish' }}"
+              onclick="this.form.submitted_by = this;"> {{ 'Unpublish' if curriculum.is_published else 'Publish' }}
+      </button>
     </div>
 
-    <details class="panel" style="margin-bottom: 30px; border: 1px solid rgba(168,199,255,0.1); border-radius: 12px; overflow: hidden; cursor: pointer;">
-        <summary style="padding: 16px 20px; color: var(--link); font-weight: bold; font-size: 1.1rem; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-            <span>General Settings</span>
-            <span class="muted" style="font-size: 12px; font-weight: 400;">(Click to edit title/description)</span>
-        </summary>
-        <div style="padding: 0 20px 20px 20px; cursor: default;">
-            <div style="border-top: 1px solid rgba(168,199,255,0.05); padding-top: 20px;">
-                <div style="display: flex; flex-direction: column; gap: 15px;">
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label for="title" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Title</label>
-                        <input type="text" id="title_field" name="title_meta" value="{{ curriculum.title }}"
-                               style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px;">
-                    </div>
-                    <div style="display: flex; flex-direction: column; gap: 5px;">
-                        <label for="description" class="muted" style="font-size: 0.85rem; font-weight: bold; text-transform: uppercase;">Description</label>
-                        <textarea id="description_field" name="description_meta" rows="3"
-                                  style="width: 100%; padding: 12px; background: #000; color: #fff; border: 1px solid #333; border-radius: 8px; font-family: inherit;">{{ curriculum.description }}</textarea>
-                    </div>
-                </div>
-            </div>
+    <details class="panel" style="margin-bottom: 30px; border: 1px solid rgba(168,199,255,0.1); border-radius: 12px; cursor: pointer;">
+        <summary style="padding: 16px 20px; color: var(--link); font-weight: bold;">General Settings</summary>
+        <div style="padding: 20px; cursor: default;">
+            <label class="muted">Title</label>
+            <input type="text" name="title_meta" value="{{ curriculum.title }}" style="width: 100%; padding: 12px; background: #000; border: 1px solid #333; border-radius: 8px;">
+            <label class="muted" style="margin-top:15px; display:block;">Description</label>
+            <textarea name="description_meta" rows="3" style="width: 100%; padding: 12px; background: #000; border: 1px solid #333; border-radius: 8px;">{{ curriculum.description }}</textarea>
         </div>
     </details>
-{# --- End of Replace Block (Line 176) --- #}
+
+
+    <datalist id="lesson-datalist">
+      {% for L in lessons %}
+        <option value="{{ L.title|e }}"></option>
+      {% endfor %}
+    </datalist>
+
+
+    <div class="panel" style="padding: 25px; border: 1px solid rgba(168,199,255,0.2); background: rgba(16,20,32,0.6);">
+      <h2 style="color: var(--link); margin-bottom:20px;">Curriculum Builder</h2>
+      <div class="glow-container" style="padding: 20px; margin-bottom: 20px;">
+        <table style="width: 100%; border-collapse: collapse;">
+          <thead>
+            <tr style="text-align: left; color: var(--muted); font-size: 0.85rem; text-transform: uppercase;">
+              <th style="width: 40px;"></th>
+              <th style="padding: 15px; width: 120px;">Type</th>
+              <th style="padding: 15px;">Phase title</th>
+              <th style="padding: 15px; width: 350px;">Lesson (Search)</th>
+              <th style="padding: 15px; width: 90px; text-align:center;">Repeat</th>
+              <th style="padding: 15px; width: 60px; text-align:center;">Del</th>
+            </tr>
+          </thead>
+          <tbody id="items-body">
+            {% for it in items %}
 
 
 
+              <tr class="item-row">
+                <td class="drag-handle">☰</td>
+                <td>
+                  <select name="item_type" class="item-type" onchange="syncRow(this)" style="width: 100%; padding: 8px;">
+                    <option value="phase" {% if it.item_type == "phase" %}selected{% endif %}>phase</option>
+                    <option value="lesson" {% if it.item_type == "lesson" %}selected{% endif %}>lesson</option>
+                  </select>
+                </td>
+                <td><input type="text" name="phase_title" class="phase-title" value="{{ it.phase_title or '' }}" placeholder="Phase name" style="width: 100%; padding: 8px;"></td>
 
 
+                <td style="padding: 10px;">
+                  <div class="lesson-wrap">
+                    <input type="text"
+                           class="lesson-search-input"
+                           list="lesson-datalist"
+                           placeholder="Search lessons..."
+                           oninput="filterLessonSearch(this)"
+                           onchange="filterLessonSearch(this)"
+                           value="{% for L in lessons %}{% if it.lesson_id == L.id %}{{ L.title }}{% endif %}{% endfor %}"
+                           style="width: 100%; padding: 8px; background: #000; color: var(--link); border: 1px solid #444;">
 
 
-  <details style="max-width:1100px; border:1px solid rgba(255,255,255,0.18);
-                  border-radius:14px; margin: 12px 0 16px 0; cursor: pointer;"
-           class="sharing-details">
-
-    <summary style="padding:14px 16px; font-weight:800; list-style: none; display: flex; justify-content: space-between; align-items: center;">
-      <span>Sharing & Permissions</span>
-      <span class="muted" style="font-size: 12px; font-weight: 400;">(Click to expand)</span>
-    </summary>
-
-    <div style="padding: 0 16px 16px 16px; cursor: default;">
-      <div style="opacity:0.8; font-size:13px; margin-bottom:10px; border-top: 1px solid rgba(255,255,255,0.1); padding-top: 12px;">
-        Add an editor by email. Pending requests show up here too.
-      </div>
-
-      <form id="invite-editor-form" method="POST" action="{{ url_for('author.curriculum_editor_invite', curriculum_id=curriculum.id) }}"
-            style="display:flex; gap:10px; align-items:center; flex-wrap:wrap;">
-        <input name="email" type="email" placeholder="friend@example.com"
-               style="padding:10px 12px; border-radius:10px; min-width:280px; background: rgba(0,0,0,0.2); border: 1px solid #333; color: white;">
-        <button type="submit" style="padding:10px 14px; border-radius:10px; font-weight:800;">
-          Grant edit access
-        </button>
-      </form>
-
-      {% if editors and editors|length > 0 %}
-        <div style="margin-top:12px; display:flex; flex-direction:column; gap:8px;">
-          {% for ed, u in editors %}
-            <div style="display:flex; justify-content:space-between; gap:10px; align-items:center;
-                        padding:10px 12px; border-radius:12px; background:rgba(255,255,255,0.04);">
-              <div>
-                <div style="font-weight:700;">{{ u.email }}</div>
-                <div style="font-size:13px; opacity:0.8;">
-                  {% if ed.can_edit %}
-                    ✅ Can edit
-                  {% else %}
-                    ⏳ Requested access (pending)
-                  {% endif %}
-                </div>
-              </div>
-
-              <div style="display:flex; gap:8px; align-items:center;">
-                {% if not ed.can_edit %}
-                  <form method="POST" action="{{ url_for('author.curriculum_editor_approve', curriculum_id=curriculum.id) }}">
-                    <input type="hidden" name="user_id" value="{{ u.id }}">
-                    <button type="submit">Approve</button>
-                  </form>
-                {% endif %}
-
-                <form method="POST" action="{{ url_for('author.curriculum_editor_remove', curriculum_id=curriculum.id) }}">
-                  <input type="hidden" name="user_id" value="{{ u.id }}">
-                  <button type="submit" style="background:#7a1e1e; color:white; border:none; padding:8px 10px; border-radius:10px; cursor: pointer;">
-                    Remove
-                  </button>
-                </form>
-              </div>
-            </div>
-          {% endfor %}
-        </div>
-      {% endif %}
-    </div>
-  </details>
-
-
-
-
-  <form method="POST"
-        enctype="multipart/form-data"
-        action="{{ url_for('author.curriculum_edit_post', curriculum_id=curriculum.id) }}">
-
-
-
-
-
-
-
-
-    <div class="panel" style="margin-top: 30px; padding: 25px; border: 1px solid rgba(168,199,255,0.2); background: rgba(16,20,32,0.6);">
-
-      <h2 style="margin-top: 0; margin-bottom: 20px; color: var(--link);">Curriculum Builder</h2>
-
-      <div style="background: var(--bg); padding: 15px; border-radius: 12px; margin-bottom: 20px; border: 1px solid #222;">
-        <label for="lesson-filter" style="display:block; margin-bottom: 8px; font-weight: bold; font-size: 0.85rem; color: var(--muted); text-transform: uppercase; letter-spacing: 0.5px;">
-          🔍 Filter lesson dropdowns
-        </label>
-        <input id="lesson-filter" type="text" placeholder="Type to filter lessons…"
-               style="width: 100%; max-width: 420px; padding: 12px; background: #000; color: #fff; border: 1px solid #444; border-radius: 8px; font-size: 1rem;">
-      </div>
-
-
-
-
-
-
-
-
-      <div class="glow-container" style="padding: 20px; margin: 20px 0;">
-
-        <div style="display: flex; align-items: center; gap: 10px; margin-bottom: 15px;">
-          <span style="background: var(--link); color: #000; padding: 4px 12px; border-radius: 20px; font-size: 0.75rem; font-weight: 900; text-transform: uppercase; letter-spacing: 1px;">
-            Editor Active
-          </span>
-          <span class="muted" style="font-size: 0.85rem;">Modify phases and lessons below</span>
-        </div>
-
-        <div style="overflow-x: auto;">
-          <table style="width: 100%; border-collapse: collapse; background: var(--bg); border-radius: 8px; overflow: hidden;">
-            <thead>
-              <tr style="background: rgba(255,255,255,0.03); text-align: left; color: var(--muted); font-size: 0.85rem; text-transform: uppercase;">
-                <th style="padding: 15px; border-bottom: 2px solid #222; width: 110px;">Type</th>
-                <th style="padding: 15px; border-bottom: 2px solid #222;">Phase title</th>
-                <th style="padding: 15px; border-bottom: 2px solid #222; width: 330px;">Lesson</th>
-                <th style="padding: 15px; border-bottom: 2px solid #222; width: 90px; text-align:center;">Repeat</th>
-                <th style="padding: 15px; border-bottom: 2px solid #222;">Note</th>
-                <th style="padding: 15px; border-bottom: 2px solid #222; width: 110px; text-align:center;">Row</th>
-              </tr>
-            </thead>
-
-            <tbody id="items-body">
-              {% for it in items %}
-                <tr class="item-row" style="border-bottom: 1px solid #222;">
-                  <td style="padding: 10px;">
-                    <select name="item_type" class="item-type" onchange="syncRow(this)" style="width: 100%; padding: 8px; background: #111; color: white; border: 1px solid #333; border-radius: 6px;">
-                      <option value="phase" {% if it.item_type == "phase" %}selected{% endif %}>phase</option>
-                      <option value="lesson" {% if it.item_type == "lesson" %}selected{% endif %}>lesson</option>
-                    </select>
-                  </td>
-
-                  <td style="padding: 10px;">
-                    <input type="text" name="phase_title" class="phase-title"
-                           value="{{ it.phase_title or '' }}"
-                           placeholder="Phase name"
-                           style="width: 100%; padding: 8px; background: #111; color: white; border: 1px solid #333; border-radius: 6px;">
-                  </td>
-
-                  <td style="padding: 10px;">
-                    <select name="lesson_id" class="lesson-id" style="width: 100%; padding: 8px; background: #111; color: white; border: 1px solid #333; border-radius: 6px;">
-                      <option value="">-- choose lesson --</option>
+                    <select name="lesson_id" class="lesson-id" style="display:none;">
+                      <option value="">-- none --</option>
                       {% for L in lessons %}
-                        <option value="{{ L.id }}" {% if it.lesson_id == L.id %}selected{% endif %}>
-                          {{ L.title }} ({{ L.code }})
-                        </option>
+                        <option value="{{ L.id }}" {% if it.lesson_id == L.id %}selected{% endif %}>{{ L.title }}</option>
                       {% endfor %}
                     </select>
-                  </td>
+                  </div>
+                </td>
 
-                  <td style="padding: 10px; text-align:center;">
-                    <input type="number" name="repeat" class="repeat"
-                           value="1" min="1" max="50" style="width: 70px; padding: 8px; background: #111; color: white; border: 1px solid #333; border-radius: 6px;">
-                  </td>
 
-                  <td style="padding: 10px;">
-                    <input type="text" name="note" class="note" value="{{ it.note or '' }}"
-                           placeholder="Optional note" style="width: 100%; padding: 8px; background: #111; color: white; border: 1px solid #333; border-radius: 6px;">
-                  </td>
-
-                  <td style="padding: 10px; text-align:center;">
-                    <button type="button" onclick="removeRow(this)" style="background: none; border: 1px solid var(--error); color: var(--error); padding: 5px 10px; border-radius: 6px; cursor: pointer; font-size: 0.8rem;">Remove</button>
-                  </td>
-                </tr>
-              {% endfor %}
-            </tbody>
-          </table>
-        </div>
+                <td><input type="number" name="repeat" class="repeat" value="{{ it.repeat or 1 }}" min="1" max="50" style="width: 100%; padding: 8px; text-align:center;"></td>
+                <td style="text-align:center;"><button type="button" onclick="removeRow(this)" style="color: var(--error); background:none; border:none;">✕</button></td>
+              </tr>
+            {% endfor %}
+          </tbody>
+        </table>
       </div>
-
-
-
-
-
-
-
-
-
-
-      <div style="margin-top: 20px; display: flex; gap: 10px;">
-        <button type="button" onclick="addPhaseRow()" class="btn" style="background: #222; border: 1px solid #444;">+ Add Phase</button>
-        <button type="button" onclick="addLessonRow()" class="btn" style="background: #222; border: 1px solid #444;">+ Add Lesson</button>
+      <div style="display: flex; gap: 10px;">
+        <button type="button" onclick="addPhaseRow()">+ Add Phase</button>
+        <button type="button" onclick="addLessonRow()">+ Add Lesson</button>
       </div>
-
-      <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #333; display: flex; align-items: center; justify-content: space-between;">
-        <div>
-            <button type="submit" class="btn primary" style="padding: 12px 30px; font-weight: bold;">Save Changes</button>
-            <a href="{{ url_for('author.curriculum_new_form') }}" class="muted" style="margin-left: 20px; text-decoration: none; font-size: 0.9rem;">New curriculum</a>
-        </div>
-        <a href="{{ url_for('author.import_form') }}" class="muted" style="text-decoration: none; font-size: 0.9rem;">Import lesson</a>
-      </div>
-
     </div>
 
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-  <div style="display:flex; gap:16px; align-items:flex-start; margin:14px 0; max-width: 1100px;">
-    <div id="coverDrop"
-         style="width:260px; height:160px; border:1px dashed rgba(255,255,255,0.35);
-                border-radius:12px; overflow:hidden; cursor:pointer; position:relative;
-                display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.04);">
-      {% set has_cover = (curriculum.cover_image_url is not none and curriculum.cover_image_url|length > 0) %}
-
-      <img id="coverPreview"
-           src="{{ curriculum.cover_image_url if has_cover else '' }}"
-           alt="Cover"
-           style="width:100%; height:100%; object-fit:cover; {{ 'display:block;' if has_cover else 'display:none;' }}">
-
-      {% if has_cover %}
-        <div style="position:absolute; inset:0; background:rgba(0,0,0,0.25); opacity:0; transition:0.15s;"></div>
-        <div style="position:absolute; bottom:8px; left:10px; right:10px; font-size:13px; opacity:0; transition:0.15s;">
-          Click or drop to replace
-        </div>
-      {% else %}
-        <div style="text-align:center; padding:12px; opacity:0.85;">
-          <div style="font-weight:600;">Add cover image</div>
-          <div style="font-size:13px; opacity:0.8; margin-top:6px;">Click or drag & drop</div>
-          <div style="font-size:12px; opacity:0.6; margin-top:6px;">png/jpg/webp/gif</div>
-        </div>
-      {% endif %}
-    </div>
-
-    <div style="flex:1;">
-      <div style="font-weight:600; margin-bottom:6px;">Curriculum cover</div>
-      <div style="opacity:0.75; margin-bottom:10px;">
-        This shows on the curriculum page and in listings.
+    <div style="display:flex; gap:16px; margin-top:30px;">
+      <div id="coverDrop" style="width:260px; height:160px; border:1px dashed rgba(255,255,255,0.35); border-radius:12px; cursor:pointer; position:relative; display:flex; align-items:center; justify-content:center; background: rgba(255,255,255,0.04);">
+        {% set has_cover = (curriculum.cover_image_url is not none and curriculum.cover_image_url|length > 0) %}
+        <img id="coverPreview" src="{{ curriculum.cover_image_url if has_cover else '' }}" style="width:100%; height:100%; object-fit:cover; {{ 'display:block;' if has_cover else 'display:none;' }}">
+        {% if not has_cover %}<div style="text-align:center; padding:12px; opacity:0.85;">Add cover image</div>{% endif %}
       </div>
-
-      <input id="coverInput" type="file" name="cover_image" accept="image/*" style="display:none;">
-
-      <div style="display:flex; gap:10px; align-items:center;">
+      <div style="flex:1;">
+        <input id="coverInput" type="file" name="cover_image" accept="image/*" style="display:none;">
         <button type="button" id="chooseCoverBtn">Choose image</button>
-
         {% if curriculum.cover_image_url %}
-          <button type="submit"
-                  formaction="{{ url_for('author.curriculum_cover_remove', curriculum_id=curriculum.id) }}"
-                  formmethod="POST">
-            Remove
-          </button>
+          <button type="submit" formaction="{{ url_for('author.curriculum_cover_remove', curriculum_id=curriculum.id) }}">Remove</button>
         {% endif %}
-
-        <div id="coverHint" style="font-size:13px; opacity:0.7;"></div>
       </div>
     </div>
-  </div>
 
-
+    <div style="margin-top: 30px; padding-top: 20px; border-top: 1px solid #333;">
+      <button type="submit" class="btn primary" style="padding: 12px 30px; font-weight: bold;">Save Changes</button>
+    </div>
   </form>
 
+  <details class="panel" style="margin-top: 30px; border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; cursor: pointer;">
+    <summary style="padding:14px; font-weight:800;">Sharing & Permissions</summary>
+    <div style="padding: 16px; cursor: default;">
+      <form id="invite-editor-form" method="POST" action="{{ url_for('author.curriculum_editor_invite', curriculum_id=curriculum.id) }}" style="display:flex; gap:10px; margin-bottom:15px;">
+        <input name="email" type="email" placeholder="friend@example.com" style="flex:1; padding:10px; border-radius:10px; background: #000; border: 1px solid #333;">
+        <button type="submit">Grant edit access</button>
+      </form>
+      {% if editors %}{% for ed, u in editors %}
+        <div style="display:flex; justify-content:space-between; padding:10px; border-radius:12px; background:rgba(255,255,255,0.04); margin-bottom:5px;">
+          <div><div style="font-weight:700;">{{ u.email }}</div><div style="font-size:13px; opacity:0.8;">{{ '✅ Can edit' if ed.can_edit else '⏳ Pending' }}</div></div>
+          <form method="POST" action="{{ url_for('author.curriculum_editor_remove', curriculum_id=curriculum.id) }}">
+            <input type="hidden" name="user_id" value="{{ u.id }}"><button type="submit" style="background:#7a1e1e;">Remove</button>
+          </form>
+        </div>
+      {% endfor %}{% endif %}
+    </div>
+  </details>
 {% endblock %}
 
 {% block scripts %}
+<script src="https://cdn.jsdelivr.net/npm/sortablejs@1.15.0/Sortable.min.js"></script>
 <script>
-  function removeRow(btn) {
-    const tr = btn.closest("tr");
-    if (tr) tr.remove();
-  }
+
+  window.addEventListener("DOMContentLoaded", () => {
+      const el = document.getElementById('items-body');
+      // 1. Initialize Drag and Drop
+      if (el) Sortable.create(el, { handle: '.drag-handle', animation: 150 });
+
+      // 2. Prevent Enter key from submitting the form in search inputs
+      document.addEventListener('keydown', function(e) {
+          if (e.key === 'Enter' && e.target.classList.contains('lesson-search-input')) {
+              e.preventDefault(); // Stop the form submission
+              e.target.blur();    // Finalize the input and trigger sync logic
+          }
+      });
+
+      // 3. Check existing rows to set initial border colors
+      document.querySelectorAll(".lesson-search-input").forEach(input => {
+          if (input.value.trim() !== "") filterLessonSearch(input);
+      });
+
+      // 4. Initialize row visibility
+      document.querySelectorAll("select.item-type").forEach(syncRow);
+  });
+
+
+  function removeRow(btn) { btn.closest("tr").remove(); }
+
 
   function syncRow(sel) {
     const tr = sel.closest("tr");
     if (!tr) return;
+    const isPhase = sel.value === "phase";
 
-    const type = sel.value;
+    // Toggle visibility using display
+    tr.querySelector(".phase-title").style.display = isPhase ? "block" : "none";
+    tr.querySelector(".lesson-wrap").style.display = isPhase ? "none" : "block";
+    tr.querySelector(".repeat").style.display = isPhase ? "none" : "block";
 
-    const phaseWrap = tr.querySelector(".phase-wrap");
-    const lessonWrap = tr.querySelector(".lesson-wrap");
-    const repeatWrap = tr.querySelector(".repeat-wrap");
-
-    if (!phaseWrap || !lessonWrap || !repeatWrap) return;
-
-    const phaseTitle = tr.querySelector(".phase-title");
-    const lessonSel = tr.querySelector(".lesson-id");
-    const repeat = tr.querySelector(".repeat");
-
-    if (type === "phase") {
-      phaseWrap.style.display = "";
-      lessonWrap.style.display = "none";
-      repeatWrap.style.display = "none";
-
-      // ensure consistent submitted values
-      lessonSel.value = "";
-      repeat.value = "1";
-    } else {
-      phaseWrap.style.display = "none";
-      lessonWrap.style.display = "";
-      repeatWrap.style.display = "";
-
-      phaseTitle.value = "";
-      if (!repeat.value) repeat.value = "1";
+    // CRITICAL: If it's a phase, we must clear the lesson_id so the server doesn't
+    // try to link a lesson to a phase header
+    if (isPhase) {
+      const hiddenSelect = tr.querySelector(".lesson-id");
+      if (hiddenSelect) hiddenSelect.value = "";
+      const searchInput = tr.querySelector(".lesson-search-input");
+      if (searchInput) searchInput.value = "";
     }
   }
 
-  function addPhaseRow() {
-    const body = document.getElementById("items-body");
-    body.insertAdjacentHTML("beforeend", phaseRowHtml());
-    // sync last row
-    const last = body.querySelector("tr.item-row:last-child select.item-type");
-    syncRow(last);
+  function filterLessonSearch(input) {
+    const val = input.value.trim(); // Trim whitespace for cleaner matching
+    const tr = input.closest("tr");
+    const select = tr.querySelector(".lesson-id");
+    const options = select.options;
+
+    let found = false;
+    // Look for the ID corresponding to the exact title selected from the pop-up
+    for (let i = 0; i < options.length; i++) {
+      if (options[i].text === val && val !== "") {
+        select.value = options[i].value;
+        input.style.borderColor = "var(--link)"; // Success blue
+        found = true;
+        break;
+      }
+    }
+
+    // If no match found yet, clear the hidden ID so the server doesn't save junk data
+    if (!found) {
+      select.value = "";
+      input.style.borderColor = "#444"; // Reset to neutral border
+    }
   }
 
-  function addLessonRow() {
-    const body = document.getElementById("items-body");
-    body.insertAdjacentHTML("beforeend", lessonRowHtml());
-    const last = body.querySelector("tr.item-row:last-child select.item-type");
-    syncRow(last);
+
+  function lessonOptionsHtml() {
+    return `{% for L in lessons %}<option value="{{ L.id }}">{{ L.title|e }}</option>{% endfor %}`;
   }
 
   function phaseRowHtml() {
     return `
       <tr class="item-row">
-        <td>
-          <select name="item_type" class="item-type" onchange="syncRow(this)">
-            <option value="phase" selected>phase</option>
-            <option value="lesson">lesson</option>
-          </select>
-        </td>
-
-        <td>
-          <div class="phase-wrap">
-            <input type="text" name="phase_title" class="phase-title"
-                   value="" placeholder="Phase name" style="width: 100%;">
-          </div>
-        </td>
-
-        <td>
-          <div class="lesson-wrap">
-            <select name="lesson_id" class="lesson-id" style="width: 100%;">
-              <option value="">-- choose lesson --</option>
-              ${lessonOptionsHtml()}
-            </select>
-          </div>
-        </td>
-
-        <td style="text-align:center;">
-          <div class="repeat-wrap">
-            <input type="number" name="repeat" class="repeat" value="1" min="1" max="50" style="width: 70px;">
-          </div>
-        </td>
-
-        <td>
-          <input type="text" name="note" class="note" value="" placeholder="Optional note" style="width: 100%;">
-        </td>
-
-        <td style="text-align:center;">
-          <button type="button" onclick="removeRow(this)">Remove</button>
-        </td>
-      </tr>
-    `;
+        <td class="drag-handle">☰</td>
+        <td><select name="item_type" class="item-type" onchange="syncRow(this)" style="width: 100%; padding: 8px;"><option value="phase" selected>phase</option><option value="lesson">lesson</option></select></td>
+        <td><input type="text" name="phase_title" class="phase-title" placeholder="Phase name" style="width: 100%; padding: 8px;"></td>
+        <td><div class="lesson-wrap"><input type="text" class="lesson-search-input" list="lesson-datalist" oninput="filterLessonSearch(this)" placeholder="Search..." style="width: 100%; padding: 8px;"><select name="lesson_id" class="lesson-id" style="display:none;"><option value="">-- none --</option>${lessonOptionsHtml()}</select></div></td>
+        <td><input type="number" name="repeat" class="repeat" value="1" style="width: 100%; padding: 8px; text-align:center;"></td>
+        <td style="text-align:center;"><button type="button" onclick="removeRow(this)">✕</button></td>
+      </tr>`;
   }
 
-  function lessonRowHtml() {
-    return `
-      <tr class="item-row">
-        <td>
-          <select name="item_type" class="item-type" onchange="syncRow(this)">
-            <option value="phase">phase</option>
-            <option value="lesson" selected>lesson</option>
-          </select>
-        </td>
+  function addPhaseRow() { document.getElementById("items-body").insertAdjacentHTML("beforeend", phaseRowHtml()); syncRow(document.getElementById("items-body").lastElementChild.querySelector(".item-type")); }
+  function addLessonRow() { addPhaseRow(); const last = document.getElementById("items-body").lastElementChild; last.querySelector(".item-type").value = "lesson"; syncRow(last.querySelector(".item-type")); }
 
-        <td>
-          <div class="phase-wrap">
-            <input type="text" name="phase_title" class="phase-title"
-                   value="" placeholder="Phase name" style="width: 100%;">
-          </div>
-        </td>
-
-        <td>
-          <div class="lesson-wrap">
-            <select name="lesson_id" class="lesson-id" style="width: 100%;">
-              <option value="">-- choose lesson --</option>
-              ${lessonOptionsHtml()}
-            </select>
-          </div>
-        </td>
-
-        <td style="text-align:center;">
-          <div class="repeat-wrap">
-            <input type="number" name="repeat" class="repeat" value="1" min="1" max="50" style="width: 70px;">
-          </div>
-        </td>
-
-        <td>
-          <input type="text" name="note" class="note" value="" placeholder="Optional note" style="width: 100%;">
-        </td>
-
-        <td style="text-align:center;">
-          <button type="button" onclick="removeRow(this)">Remove</button>
-        </td>
-      </tr>
-    `;
-  }
-
-  function lessonOptionsHtml() {
-    // server-rendered options embedded into JS safely
-    return `{% for L in lessons %}<option value="{{ L.id|e }}">{{ (L.title ~ " (" ~ L.code ~ ")")|e }}</option>{% endfor %}`;
-  }
-
-  // Initialize existing rows on load
-  window.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("select.item-type").forEach(syncRow);
-  });
-
-  function applyLessonFilter(text) {
-    const needle = (text || "").trim().toLowerCase();
-    document.querySelectorAll("select.lesson-id").forEach(sel => {
-      Array.from(sel.options).forEach((opt, idx) => {
-        if (idx === 0) { // keep "-- choose lesson --"
-          opt.hidden = false;
-          return;
-        }
-        const hay = (opt.textContent || "").toLowerCase();
-        opt.hidden = (needle && !hay.includes(needle));
-      });
-    });
-  }
-
-  window.addEventListener("DOMContentLoaded", () => {
-    document.querySelectorAll("select.item-type").forEach(syncRow);
-
-    const lf = document.getElementById("lesson-filter");
-    if (lf) {
-      lf.addEventListener("input", () => applyLessonFilter(lf.value));
-    }
-  });
-
-</script>
-
-<script>
   (function () {
-    const drop = document.getElementById("coverDrop");
-    const input = document.getElementById("coverInput");
-    const preview = document.getElementById("coverPreview");
-    const chooseBtn = document.getElementById("chooseCoverBtn");
-    const hint = document.getElementById("coverHint");
-
-    if (!drop || !input || !preview || !chooseBtn) return;
-
-    function pick() { input.click(); }
-
-    function setPreview(file) {
-      if (!file) return;
-      if (!file.type.startsWith("image/")) {
-        hint.textContent = "Please choose an image file.";
-        return;
-      }
-      hint.textContent = "Ready — click Save to upload.";
-      preview.src = URL.createObjectURL(file);
-      preview.style.display = "block";
-    }
-
-    chooseBtn.addEventListener("click", pick);
-    drop.addEventListener("click", pick);
-
-    input.addEventListener("change", () => {
-      setPreview(input.files && input.files[0]);
-    });
-
-    // Drag & drop
-    drop.addEventListener("dragover", (e) => { e.preventDefault(); drop.style.outline = "2px solid rgba(255,255,255,0.35)"; });
-    drop.addEventListener("dragleave", () => { drop.style.outline = "none"; });
-    drop.addEventListener("drop", (e) => {
-      e.preventDefault();
-      drop.style.outline = "none";
-      const file = e.dataTransfer.files && e.dataTransfer.files[0];
-      if (!file) return;
-      // put it into the input so it submits normally
-      const dt = new DataTransfer();
-      dt.items.add(file);
-      input.files = dt.files;
-      setPreview(file);
-    });
+    const drop = document.getElementById("coverDrop"), input = document.getElementById("coverInput"), preview = document.getElementById("coverPreview"), chooseBtn = document.getElementById("chooseCoverBtn");
+    if (!drop || !input) return;
+    const pick = () => input.click();
+    chooseBtn.onclick = pick; drop.onclick = pick;
+    input.onchange = () => { if (input.files[0]) preview.src = URL.createObjectURL(input.files[0]); preview.style.display = "block"; };
+    drop.ondragover = (e) => { e.preventDefault(); drop.style.outline = "2px solid var(--link)"; };
+    drop.ondrop = (e) => { e.preventDefault(); input.files = e.dataTransfer.files; input.onchange(); };
   })();
 </script>
-
-
 {% endblock %}

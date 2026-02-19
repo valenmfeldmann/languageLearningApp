@@ -46,6 +46,7 @@ BLOCK TYPES & SCHEMAS
 
 4) quiz_mcq: Multiple choice question.
    - REQUIREMENT: If the prompt or choices contain LaTeX (\\\( ... \\\)), you MUST use the object format with "kind": "markdown".
+   - INDEXING RULE: answer_index MUST be 0-based. (e.g., Use 0 for the first choice, 1 for the second).
    - Failure to do this will result in the math appearing as plain text.
 {
   "type": "quiz_mcq",

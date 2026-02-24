@@ -13,6 +13,14 @@
     .drag-handle { cursor: grab !important; user-select: none; color: var(--muted); padding: 10px; text-align: center; width: 40px; }
     .drag-handle:active { cursor: grabbing !important; }
     .item-row:hover { background: rgba(255,255,255,0.02); }
+
+
+    body.drag-over-active {
+        outline: 4px dashed var(--primary);
+        outline-offset: -4px;
+        background-color: rgba(var(--primary-rgb), 0.05);
+    }
+
   </style>
 
   <div style="display:flex; align-items: baseline; justify-content: space-between; margin-bottom: 20px;">
@@ -104,7 +112,23 @@
 
 
                 <td><input type="number" name="repeat" class="repeat" value="{{ it.repeat or 1 }}" min="1" max="50" style="width: 100%; padding: 8px; text-align:center;"></td>
-                <td style="text-align:center;"><button type="button" onclick="removeRow(this)" style="color: var(--error); background:none; border:none;">✕</button></td>
+
+                <td style="text-align:center;">
+                  <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+                    <button type="button" onclick="removeRow(this)" title="Remove from Curriculum" style="color: var(--muted); background:none; border:none; font-size: 1.2rem;">✕</button>
+
+                    {% if it.item_type == 'lesson' and it.lesson_id %}
+                      <button type="button"
+                              onclick="deleteSourceLesson('{{ it.lesson_id }}')"
+                              title="Delete Lesson from Server"
+                              style="color: var(--error); background:none; border:none; font-size: 0.6rem; text-transform: uppercase; font-weight: bold;">
+                        Delete Source
+                      </button>
+                    {% endif %}
+                  </div>
+                </td>
+
+
               </tr>
             {% endfor %}
           </tbody>
@@ -238,11 +262,28 @@
     return `
       <tr class="item-row">
         <td class="drag-handle">☰</td>
-        <td><select name="item_type" class="item-type" onchange="syncRow(this)" style="width: 100%; padding: 8px;"><option value="phase" selected>phase</option><option value="lesson">lesson</option></select></td>
+        <td>
+          <select name="item_type" class="item-type" onchange="syncRow(this)" style="width: 100%; padding: 8px;">
+            <option value="phase" selected>phase</option>
+            <option value="lesson">lesson</option>
+          </select>
+        </td>
         <td><input type="text" name="phase_title" class="phase-title" placeholder="Phase name" style="width: 100%; padding: 8px;"></td>
-        <td><div class="lesson-wrap"><input type="text" class="lesson-search-input" list="lesson-datalist" oninput="filterLessonSearch(this)" placeholder="Search..." style="width: 100%; padding: 8px;"><select name="lesson_id" class="lesson-id" style="display:none;"><option value="">-- none --</option>${lessonOptionsHtml()}</select></div></td>
+        <td>
+          <div class="lesson-wrap">
+            <input type="text" class="lesson-search-input" list="lesson-datalist" oninput="filterLessonSearch(this)" placeholder="Search..." style="width: 100%; padding: 8px;">
+            <select name="lesson_id" class="lesson-id" style="display:none;">
+              <option value="">-- none --</option>
+              ${lessonOptionsHtml()}
+            </select>
+          </div>
+        </td>
         <td><input type="number" name="repeat" class="repeat" value="1" style="width: 100%; padding: 8px; text-align:center;"></td>
-        <td style="text-align:center;"><button type="button" onclick="removeRow(this)">✕</button></td>
+        <td style="text-align:center;">
+          <div style="display: flex; flex-direction: column; gap: 4px; align-items: center;">
+            <button type="button" onclick="removeRow(this)" title="Remove from Curriculum" style="color: var(--muted); background:none; border:none; font-size: 1.2rem;">✕</button>
+            </div>
+        </td>
       </tr>`;
   }
 
@@ -258,5 +299,145 @@
     drop.ondragover = (e) => { e.preventDefault(); drop.style.outline = "2px solid var(--link)"; };
     drop.ondrop = (e) => { e.preventDefault(); input.files = e.dataTransfer.files; input.onchange(); };
   })();
+
+
+  /* curriculum_edit.html */
+  function deleteSourceLesson(lessonId) {
+      if (confirm("🚨 WARNING: This will permanently delete this lesson and ALL its associated media (images/audio) from the server. This cannot be undone. Proceed?")) {
+          const form = document.createElement('form');
+          form.method = 'POST';
+          form.action = `/author/lesson/${lessonId}/delete`;
+          document.body.appendChild(form);
+          form.submit();
+      }
+  }
+
+
+
+
+  window.addEventListener('dragover', (e) => {
+      e.preventDefault();
+      document.body.classList.add('drag-active'); // Show an overlay if you want
+  });
+
+  window.addEventListener('drop', async (e) => {
+      e.preventDefault();
+      const files = Array.from(e.dataTransfer.files);
+
+      // Check if it's a zip or if they dropped multiple files
+      const lessonJson = files.find(f => f.name === 'lesson.json');
+      const assetsZip = files.find(f => f.name.endsWith('.zip'));
+
+      if (lessonJson) {
+          const formData = new FormData();
+          formData.append('lesson_json', lessonJson);
+          if (assetsZip) formData.append('assets_zip', assetsZip);
+
+          const resp = await fetch(`/author/curriculum/{{ curriculum.id }}/drop_import`, {
+              method: 'POST',
+              body: formData
+          });
+
+          if (resp.ok) {
+              window.location.reload(); // Refresh to show the new row
+          } else {
+              const err = await resp.json();
+              alert("Import failed: " + err.error);
+          }
+      }
+  });
+
+
+
+
+
+  // =========================================
+  // Drag and Drop Lesson Import Implementation
+  // =========================================
+  const dropZone = document.body;
+
+  // Prevent default browser behaviors for drag events
+  ['dragenter', 'dragover', 'dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, preventDefaults, false);
+  });
+
+  function preventDefaults(e) {
+      e.preventDefault();
+      e.stopPropagation();
+  }
+
+  // Add/remove visual highlight when dragging over the window
+  ['dragenter', 'dragover'].forEach(eventName => {
+      dropZone.addEventListener(eventName, highlight, false);
+  });
+
+  ['dragleave', 'drop'].forEach(eventName => {
+      dropZone.addEventListener(eventName, unhighlight, false);
+  });
+
+  function highlight(e) {
+      dropZone.classList.add('drag-over-active');
+  }
+
+  function unhighlight(e) {
+      dropZone.classList.remove('drag-over-active');
+  }
+
+  // Handle the dropped files
+  dropZone.addEventListener('drop', handleDrop, false);
+
+
+
+
+  async function handleDrop(e) {
+      const files = Array.from(e.dataTransfer.files);
+
+      // EXIT EARLY if no files were dropped (e.g., just reordering rows)
+      if (files.length === 0) {
+          return;
+      }
+
+      const lessonJson = files.find(f => f.name === 'lesson.json');
+      const masterZip = files.find(f => f.name.endsWith('.zip'));
+
+      const formData = new FormData();
+      let endpoint = "";
+
+      if (masterZip && !lessonJson) {
+          // SCENARIO 1: Master ZIP containing multiple lessons
+          formData.append('master_zip', masterZip);
+          endpoint = `/author/curriculum/{{ curriculum.id }}/batch_import`;
+      } else if (lessonJson) {
+          // SCENARIO 2: Single lesson (loose files)
+          formData.append('lesson_json', lessonJson);
+          files.filter(f => f.name !== 'lesson.json').forEach(f => {
+              formData.append('asset_files', f);
+          });
+          endpoint = `/author/curriculum/{{ curriculum.id }}/drop_import`;
+      } else {
+          alert("Please drop either a master ZIP file or a selection of files including 'lesson.json'.");
+          return;
+      }
+
+      try {
+          document.body.style.cursor = 'wait';
+          const resp = await fetch(endpoint, {
+              method: 'POST',
+              body: formData
+          });
+
+          if (resp.ok) {
+              window.location.reload();
+          } else {
+              const err = await resp.json();
+              alert("Import failed: " + err.error);
+          }
+      } catch (err) {
+          alert("Upload error: " + err.message);
+      } finally {
+          document.body.style.cursor = 'default';
+      }
+  }
+
 </script>
 {% endblock %}

@@ -33,6 +33,11 @@ import time
 from werkzeug.utils import secure_filename
 from flask import current_app, url_for
 from app.models import CurriculumEditor, User
+import shutil
+import os
+from flask import current_app
+from sqlalchemy import func  # <-- Add this line
+
 
 DEFAULT_SHARES = 100
 
@@ -328,6 +333,133 @@ def _validate_lesson_payload(payload: dict[str, Any]) -> dict[str, Any]:
 #                 raise ValueError(f"assets[{i}].ref must start with 'assets/'")
 #
 #     return payload
+
+
+# app/author/routes.py
+
+def _append_lesson_to_curriculum(lesson_id, curriculum_id):
+    """Adds a lesson to the end of a specific curriculum."""
+    last_pos = (db.session.query(func.max(CurriculumItem.position))
+                .filter_by(curriculum_id=curriculum_id)
+                .scalar())
+    next_pos = (last_pos + 1) if last_pos is not None else 0
+    db.session.add(CurriculumItem(
+        curriculum_id=curriculum_id,
+        position=next_pos,
+        item_type="lesson",
+        lesson_id=lesson_id
+    ))
+
+
+
+def _save_zip_assets_to_lesson(z, info_list, lesson_id, folder_prefix):
+    root = _assets_root() / lesson_id / "assets"
+    root.mkdir(parents=True, exist_ok=True)
+
+    for info in info_list:
+        # Strip the folder prefix to get just the filename
+        filename = info.filename.replace(folder_prefix + "assets/", "")
+        if not filename or info.is_dir(): continue
+
+        # Save the physical file
+        target = root / secure_filename(filename)
+        with z.open(info) as src, open(target, "wb") as dst:
+            dst.write(src.read())
+
+        # Register in DB
+        # Ensure the 'ref' starts with 'assets/' for the lesson to find it
+        db.session.add(LessonAsset(
+            lesson_id=lesson_id,
+            ref=f"assets/{filename}",
+            storage_path=str(target),
+            size_bytes=info.file_size
+        ))
+
+
+@bp.post("/curriculum/<curriculum_id>/batch_import")
+@login_required
+def curriculum_batch_import(curriculum_id):
+    """Processes a single ZIP containing multiple lesson sub-folders."""
+    _require_curriculum_perm(curriculum_id, need_edit=True)
+    master_zip_fs = request.files.get("master_zip")
+
+    if not master_zip_fs:
+        return jsonify({"error": "No ZIP file provided"}), 400
+
+    try:
+        with zipfile.ZipFile(master_zip_fs) as z:
+            # Find every 'lesson.json' in the ZIP
+            json_paths = [i.filename for i in z.infolist() if i.filename.endswith('lesson.json')]
+
+            for path in json_paths:
+                folder_prefix = path.rsplit('lesson.json', 1)[0]
+
+                with z.open(path) as f:
+                    payload = json.loads(f.read())
+                    payload = _validate_lesson_payload(payload)
+
+                # 1. Create/Update Lesson
+                lesson = Lesson.query.filter_by(code=payload["code"]).one_or_none()
+                if not lesson:
+                    lesson = Lesson(code=payload["code"], created_by_user_id=current_user.id)
+                    db.session.add(lesson)
+
+                lesson.title = payload["title"]
+                db.session.flush()
+
+                # 2. Cleanup and Save Assets
+                LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+                LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+                lesson_assets = [i for i in z.infolist()
+                                 if i.filename.startswith(folder_prefix + "assets/") and not i.is_dir()]
+                _save_zip_assets_to_lesson(z, lesson_assets, lesson.id, folder_prefix)
+
+                # 3. Create Blocks
+                for idx, b in enumerate(payload.get("blocks", [])):
+                    db.session.add(LessonBlock(lesson_id=lesson.id, position=idx,
+                                               type=b["type"], payload_json=b["payload"]))
+
+                # 4. Link to Curriculum
+                _append_lesson_to_curriculum(lesson.id, curriculum_id)
+
+        db.session.commit()
+        return jsonify({"success": True})
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
+
+
+def process_master_zip(zip_fs, curriculum_id, user_id):
+    """
+    Unpacks a ZIP, looks for every folder containing a lesson.json,
+    and imports them all into the curriculum.
+    """
+    with zipfile.ZipFile(zip_fs) as z:
+        # Find all lesson.json files regardless of how deep they are
+        lesson_files = [info.filename for info in z.infolist() if info.filename.endswith('lesson.json')]
+
+        for json_path in lesson_files:
+            # Determine the folder prefix for this specific lesson
+            folder_prefix = json_path.rsplit('lesson.json', 1)[0]
+
+            # Extract the JSON and create a virtual "file stream" for it
+            with z.open(json_path) as f:
+                payload = json.loads(f.read())
+
+            # 1. Process the Lesson metadata
+            lesson = process_lesson_import_from_payload(payload, user_id)
+
+            # 2. Extract only the assets belonging to this folder
+            lesson_assets = [info for info in z.infolist()
+                             if info.filename.startswith(folder_prefix + "assets/")
+                             and not info.is_dir()]
+
+            _save_zip_assets_to_lesson(z, lesson_assets, lesson.id, folder_prefix)
+
+            # 3. Add to Curriculum
+            _append_lesson_to_curriculum(lesson.id, curriculum_id)
 
 
 def _extract_assets_zip(zip_fs, lesson_id: str) -> dict[str, tuple[str, int | None]]:
@@ -730,6 +862,39 @@ def lesson_apply_json(lesson_id: str):
     db.session.commit()
     flash("Applied lesson JSON to this lesson. Existing assets were preserved.", "success")
     return redirect(url_for("author.lesson_edit", lesson_id=lesson.id))
+
+
+
+
+@bp.post("/lesson/<lesson_id>/delete")
+@login_required
+def lesson_delete(lesson_id):
+    # 1. Fetch the lesson and ensure the current user owns it
+    lesson = Lesson.query.filter_by(id=lesson_id, created_by_user_id=current_user.id).first_or_404()
+
+    # 2. Path to the assets folder (e.g., instance/lesson_assets/<lesson_id>)
+    # Adjust this based on your actual storage path logic
+    assets_dir = os.path.join(current_app.instance_path, 'lesson_assets', lesson.id)
+
+    try:
+        # 3. Delete physical files first
+        if os.path.exists(assets_dir):
+            shutil.rmtree(assets_dir)
+            print(f"Cleaned up assets for lesson {lesson.id}")
+
+        # 4. Delete the database record
+        # CASCADE in your models.py will automatically handle LessonBlock and LessonAsset records
+        db.session.delete(lesson)
+        db.session.commit()
+
+        flash("Lesson and assets permanently deleted.", "success")
+    except Exception as e:
+        db.session.rollback()
+        flash(f"Error during deletion: {str(e)}", "error")
+        print(f"Deletion error: {e}")
+
+    return redirect(request.referrer or url_for('author.lesson_index'))
+
 
 
 @bp.get("/lessons")
@@ -2242,6 +2407,232 @@ def curriculum_unarchive(curriculum_id: str):
         flash("Curriculum is not archived.", "info")
 
     return redirect(url_for("author.curriculum_edit", curriculum_id=cur.id))
+
+
+# app/author/routes.py
+
+def process_lesson_import(lesson_json_data: dict, assets_zip_stream=None) -> Lesson:
+    """Core logic to create/update a lesson from JSON data and an optional ZIP of assets."""
+    payload = _validate_lesson_payload(lesson_json_data)
+    code = payload["code"].strip()
+
+    # Upsert Lesson metadata
+    lesson = Lesson.query.filter_by(code=code).one_or_none()
+    if not lesson:
+        lesson = Lesson(code=code, created_by_user_id=current_user.id)
+        db.session.add(lesson)
+
+    lesson.title = payload["title"].strip()
+    lesson.description = payload.get("description")
+    lesson.language_code = payload.get("language_code")
+    lesson.is_published = bool(payload.get("is_published"))
+    db.session.flush()
+
+    # Clear old blocks
+    LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+
+    # Handle Assets
+    extracted = {}
+    if assets_zip_stream:
+        LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+        db.session.flush()
+        extracted = _extract_assets_zip(assets_zip_stream, lesson.id)
+
+    # Register Assets and Blocks... (Keep your existing logic from import_post here)
+    # ...
+
+    return lesson
+
+
+
+def _create_block_records(lesson_id, blocks_data, asset_map):
+    """
+    Iterates through lesson block data and creates LessonBlock records.
+    Uses asset_map (filename -> asset_id) to potentially resolve references.
+    """
+    for idx, b_data in enumerate(blocks_data):
+        b_type = b_data.get("type")
+        payload = b_data.get("payload", {})
+
+        # If the block references an asset (e.g., audio_asset, video_asset),
+        # we ensure the 'ref' exists in our newly uploaded assets
+        if b_type in ("audio_asset", "video_asset") and "ref" in payload:
+            ref = payload["ref"]
+            # We strip 'assets/' prefix if the map uses raw filenames,
+            # or keep it if your map uses the full ref path
+            filename = ref.replace("assets/", "")
+            if filename not in asset_map:
+                print(f"Warning: Block {idx} references missing asset {ref}")
+
+        # Create the block record
+        new_block = LessonBlock(
+            lesson_id=lesson_id,
+            position=idx,
+            type=b_type,
+            payload_json=payload
+        )
+        db.session.add(new_block)
+
+def _process_dropped_files(json_file, asset_files, user_id):
+    """
+    Helper: Handles creating/updating a lesson from a dropped lesson.json
+    and a list of asset files. Does NOT commit the session.
+    """
+    # 1. Load and validate JSON
+    try:
+        payload = _load_json_file(json_file)
+        payload = _validate_lesson_payload(payload)
+    except ValueError as e:
+        raise ValueError(str(e))
+
+    code = payload["code"].strip()
+
+    # 2. Get or create Lesson
+    lesson = Lesson.query.filter_by(code=code).one_or_none()
+    if not lesson:
+        lesson = Lesson(code=code, created_by_user_id=user_id)
+        db.session.add(lesson)
+
+    # 3. Update metadata
+    lesson.title = payload["title"].strip()
+    lesson.description = payload.get("description")
+    lesson.language_code = payload.get("language_code")
+    lesson.is_published = bool(payload.get("is_published"))
+
+    # Flush to get lesson.id for asset paths
+    db.session.flush()
+
+    # 4. Clear existing blocks and assets so we can rebuild them
+    LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+    LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+    # 5. Setup asset directory on disk
+    assets_dir = os.path.join(current_app.instance_path, 'lesson_assets', str(lesson.id))
+    if os.path.exists(assets_dir):
+        shutil.rmtree(assets_dir)
+    os.makedirs(assets_dir, exist_ok=True)
+
+    # 6. Process and save all asset files
+    asset_map = {}  # Maps filename -> new asset_id
+
+    for f_storage in asset_files:
+        filename = secure_filename(f_storage.filename)
+        if not filename:
+            continue
+
+        save_path = os.path.join(assets_dir, filename)
+        f_storage.save(save_path)
+
+        # Determine asset type roughly based on extension
+        ext = os.path.splitext(filename)[1].lower()
+        asset_type = 'other'
+        if ext in ['.jpg', '.jpeg', '.png', '.gif', '.webp']:
+            asset_type = 'image'
+        elif ext in ['.mp3', '.wav', '.ogg', '.m4a']:
+            asset_type = 'audio'
+        elif ext in ['.mp4', '.mov', '.webm']:
+            asset_type = 'video'
+
+        asset = LessonAsset(
+            lesson_id=lesson.id,
+            filename=filename,
+            storage_path=os.path.join('lesson_assets', str(lesson.id), filename),
+            asset_type=asset_type,
+            created_by_user_id=user_id
+        )
+        db.session.add(asset)
+        db.session.flush()  # Flush to get the new asset.id
+        asset_map[filename] = asset.id
+
+    # 7. Create blocks using the asset map to link files
+    blocks_data = payload.get("blocks", [])
+    _create_block_records(lesson.id, blocks_data, asset_map)
+
+    return lesson
+
+
+# app/author/routes.py
+from sqlalchemy import func  # Ensure this is imported at the top!
+
+
+@bp.post("/curriculum/<curriculum_id>/drop_import")
+@login_required
+def curriculum_drop_import(curriculum_id: str):
+    _require_curriculum_perm(curriculum_id, need_edit=True)
+
+    # 1. Capture the JSON and the list of individual files
+    lesson_json_fs = request.files.get("lesson_json")
+    asset_files = request.files.getlist("asset_files")  # Note: getlist for multiple files
+
+    if not lesson_json_fs:
+        return jsonify({"error": "Missing lesson.json"}), 400
+
+    try:
+        # Load and validate the lesson metadata
+        payload = _load_json_file(lesson_json_fs)
+        payload = _validate_lesson_payload(payload)
+        code = payload["code"].strip()
+
+        # 2. Create or Update the Lesson
+        lesson = Lesson.query.filter_by(code=code).one_or_none()
+        if not lesson:
+            lesson = Lesson(code=code, created_by_user_id=current_user.id)
+            db.session.add(lesson)
+
+        lesson.title = payload["title"].strip()
+        lesson.description = payload.get("description")
+        lesson.is_published = bool(payload.get("is_published"))
+        db.session.flush()
+
+        # 3. Clean up old blocks and assets
+        LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+        LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+        # 4. Save individual asset files to disk
+        assets_dir = _assets_root() / lesson.id / "assets"
+        assets_dir.mkdir(parents=True, exist_ok=True)
+
+        for f in asset_files:
+            if not f.filename: continue
+            fname = secure_filename(f.filename)
+            f.save(assets_dir / fname)
+
+            # Register asset in DB so the lesson can find it
+            db.session.add(LessonAsset(
+                lesson_id=lesson.id,
+                ref=f"assets/{fname}",
+                storage_path=str(assets_dir / fname),
+                content_type=f.mimetype
+            ))
+
+        # 5. Rebuild Blocks
+        for idx, b in enumerate(payload["blocks"]):
+            db.session.add(LessonBlock(
+                lesson_id=lesson.id,
+                position=idx,
+                type=b["type"],
+                payload_json=b["payload"]
+            ))
+
+        # 6. Auto-link to the end of the Curriculum
+        last_pos = (db.session.query(func.max(CurriculumItem.position))
+                    .filter_by(curriculum_id=curriculum_id).scalar())
+        next_pos = (last_pos + 1) if last_pos is not None else 0
+
+        db.session.add(CurriculumItem(
+            curriculum_id=curriculum_id,
+            position=next_pos,
+            item_type="lesson",
+            lesson_id=lesson.id
+        ))
+
+        db.session.commit()
+        return jsonify({"success": True, "lesson_id": lesson.id, "title": lesson.title})
+
+    except Exception as e:
+        db.session.rollback()
+        return jsonify({"error": str(e)}), 500
+
 
 
 

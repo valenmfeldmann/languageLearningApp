@@ -1,25 +1,5 @@
 {% extends "base.html" %}
 {% block content %}
-<!--  <h1>Your lessons</h1>-->
-
-<!--  <p><a href="{{ url_for('author.lesson_new_form') }}">+ New lesson</a></p>-->
-
-
-
-
-<!--  {% if lessons|length == 0 %}-->
-<!--    <p>No lessons yet.</p>-->
-<!--  {% else %}-->
-<!--    <ul>-->
-<!--      {% for l in lessons %}-->
-<!--        <li>-->
-<!--          <a href="{{ url_for('author.lesson_edit', lesson_id=l.id) }}">{{ l.title }}</a>-->
-<!--          <small>({{ l.code }})</small>-->
-<!--        </li>-->
-<!--      {% endfor %}-->
-<!--    </ul>-->
-<!--  {% endif %}-->
-
 
 
 
@@ -131,33 +111,43 @@
     </a>
 
     {% for l in lessons %}
-      <a href="{{ url_for('author.lesson_edit', lesson_id=l.id) }}" class="mgmt-card">
+      <div class="mgmt-card" style="cursor: default;">
         <div class="card-top">
           <span class="lesson-code-badge">{{ l.code }}</span>
           <span class="muted" style="font-size: 0.7rem;">Created {{ l.created_at.strftime('%b %d, %Y') }}</span>
         </div>
 
-        <div style="font-size: 1.15rem; font-weight: 700; color: var(--text); line-height: 1.2;">
+        <a href="{{ url_for('author.lesson_edit', lesson_id=l.id) }}"
+           style="font-size: 1.15rem; font-weight: 700; color: var(--text); line-height: 1.2; text-decoration: none;">
           {{ l.title }}
+        </a>
+
+        <div style="margin-top: 10px; display: flex; justify-content: space-between; align-items: center;">
+          <form method="POST"
+                action="{{ url_for('author.lesson_delete', lesson_id=l.id) }}"
+                onsubmit="return confirm('Wait! This will permanently delete this lesson and all its associated media. Continue?');">
+              <button type="submit" style="background: var(--error); padding: 5px 10px; font-size: 0.7rem; border-radius: 6px;">
+                Delete from Server
+              </button>
+          </form>
+
+          <a href="{{ url_for('author.lesson_edit', lesson_id=l.id) }}" class="muted" style="font-size: 0.8rem; font-weight: 700;">
+            Edit Lesson →
+          </a>
         </div>
 
-        <div class="status-row">
+        <div class="status-row" style="margin-top: 12px;">
           {% if l.is_published %}
             <span class="badge badge-published">Published</span>
           {% else %}
             <span class="badge badge-draft">Draft</span>
           {% endif %}
-
-          {% if l.visibility == 'public' %}
-            <span class="badge badge-public">Public</span>
-          {% endif %}
         </div>
-
-        <div style="margin-top: 4px; text-align: right; font-size: 0.8rem; font-weight: 700; color: var(--link); opacity: 0;">
-          Edit Lesson →
-        </div>
-      </a>
+      </div>
     {% endfor %}
+
+
+
   </div>
 
   {% if lessons|length == 0 %}

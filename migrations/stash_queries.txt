@@ -2,9 +2,12 @@
 
 -- select * from lesson_school
 
--- select *
--- from lesson
 
+
+
+
+-- select *
+-- from lesson_subject
 
 
 
@@ -13,6 +16,26 @@
 
 
 
+-- This let's us see all interesting information about all users (no subscription)
+SELECT
+    u.id AS user_id,
+    u.name,
+    u.email,
+    -- Displaying Streak for activity context
+    u.current_streak,
+    u.last_activity_date,
+    -- Financial Balances
+    ab.balance AS an_ticks_balance,
+    (u.stripe_balance_cents / 100.0) AS stripe_balance_usd,
+    -- Activity Density: How many trivia questions have they answered?
+    (SELECT COUNT(*) FROM trivia_answer WHERE user_id = u.id) AS total_trivia_attempts,
+    (SELECT COUNT(*) FROM trivia_answer WHERE user_id = u.id AND is_correct = TRUE) AS total_trivia_correct
+FROM "user" u
+JOIN access_account aa ON aa.owner_user_id = u.id
+JOIN access_balance ab ON ab.account_id = aa.id
+WHERE aa.account_type = 'user_wallet'
+  AND ab.asset_id = '9f55e9935b7d42c2bf75f840ae10e109' -- Your verified AN Asset ID
+ORDER BY u.current_streak DESC, ab.balance DESC;
 
 
 -- -- This let's us see all interesting information about all users

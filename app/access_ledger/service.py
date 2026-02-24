@@ -15,7 +15,7 @@ from app.extensions import db
 from app.models import AccessAccount, AccessTxn, AccessEntry, AccessBalance, AccessAsset, User
 
 AN_SCALE = 1000  # 1 AN = 1000 ticks
-DAILY_TAX_AN = 1  # 1 AN = 1000 ticks
+DAILY_TAX_AN = 0 # 1  # 1 AN = 1000 ticks (Zero tax for now)
 DAILY_TAX_TICKS = DAILY_TAX_AN*AN_SCALE
 
 # ---- Velocity tax (debug-tunable) ----

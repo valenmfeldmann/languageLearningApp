@@ -90,13 +90,21 @@
 <script>
 let bufferReady = false;
 
+
 async function preloadNextQuestion() {
   bufferReady = false;
   const buffer = document.getElementById('trivia-buffer');
+
+  // Find the ID of the question currently on the screen
+  const currentBlockId = document.querySelector('input[name="block_id"]')?.value;
+
+  // Attach it as an 'exclude' parameter
+  const url = new URL(window.location.href);
+  if (currentBlockId) url.searchParams.set('exclude', currentBlockId);
+
   try {
-    const response = await fetch(window.location.href);
-    const html = await response.text();
-    const doc = new DOMParser().parseFromString(html, 'text/html');
+    const response = await fetch(url);
+    const html = await response.text();    const doc = new DOMParser().parseFromString(html, 'text/html');
     const nextCard = doc.getElementById('active-trivia-card');
 
     if (nextCard) {
@@ -224,6 +232,16 @@ document.addEventListener('click', async (e) => {
         activeCard.innerHTML = buffer.innerHTML;
         buffer.innerHTML = "";
 
+        // RANDOMIZE CHOICES HERE
+        const grid = activeCard.querySelector('.trivia-grid');
+        if (grid) {
+          const btns = Array.from(grid.querySelectorAll('.choice-btn'));
+          for (let i = btns.length - 1; i > 0; i--) {
+            const j = Math.floor(Math.random() * (i + 1));
+            grid.appendChild(btns[j]);
+          }
+        }
+
         // Autoplay fresh question audio
         const newAudio = activeCard.querySelector('audio');
         if (newAudio) {
@@ -235,6 +253,8 @@ document.addEventListener('click', async (e) => {
         window.location.reload();
       }
     }, 800);
+
+
 
   } catch (err) {
     console.error("Submission Error:", err);

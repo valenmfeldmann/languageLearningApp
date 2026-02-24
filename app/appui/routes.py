@@ -171,6 +171,80 @@ def ledger_txn(txn_id):
 
 
 
+# @bp.get("/trivia")
+# @login_required
+# def trivia_page():
+#     if not has_access(current_user):
+#         return redirect(url_for("billing.pricing"))
+#
+#     search_text = (request.args.get("q") or "").strip()
+#     subject_code = (request.args.get("subject") or "").strip() or None
+#
+#     subjects = (LessonSubject.query
+#                 .filter(LessonSubject.active.is_(True))
+#                 .order_by(LessonSubject.name.asc())
+#                 .all())
+#
+#     from sqlalchemy import func
+#
+#     alpha = 0.7  # tune: bigger => bad questions disappear faster
+#
+#     bad_counts = (
+#         db.session.query(
+#             TriviaBadVote.lesson_block_id.label("block_id"),
+#             func.count(TriviaBadVote.id).label("bad_count"),
+#         )
+#         .group_by(TriviaBadVote.lesson_block_id)
+#         .subquery()
+#     )
+#
+#     bad_count = func.coalesce(bad_counts.c.bad_count, 0)
+#     weight = func.exp(-alpha * bad_count)
+#     weight_safe = func.greatest(weight, 1e-6)
+#     score = (-func.ln(func.random())) / weight_safe  # smaller score wins
+#
+#     # Updated query: Include Curriculum joins
+#     q = (
+#         db.session.query(LessonBlock, Lesson)
+#         .join(Lesson, Lesson.id == LessonBlock.lesson_id)
+#         .join(CurriculumItem, CurriculumItem.lesson_id == Lesson.id)
+#         .join(Curriculum, Curriculum.id == CurriculumItem.curriculum_id)
+#         .outerjoin(bad_counts, bad_counts.c.block_id == LessonBlock.id)
+#         .filter(
+#             LessonBlock.type == "quiz_mcq",
+#             Curriculum.is_published == True  # Ensure curriculum is public
+#         )
+#     )
+#
+#     if subject_code:
+#         q = q.filter(Lesson.subject_code == subject_code)
+#
+#     if search_text:
+#         like = f"%{search_text}%"
+#         q = q.filter(
+#             (Lesson.title.ilike(like)) |
+#             (Lesson.description.ilike(like)) |
+#             (Lesson.code.ilike(like))
+#         )
+#
+#     row = q.order_by(score).first()
+#
+#     if not row:
+#         flash("No trivia questions found for that filter.", "info")
+#         return render_template(
+#             "trivia/page.html",
+#             block=None,
+#             lesson=None,
+#             subjects=subjects,
+#             subject_code=subject_code,
+#             q=search_text,
+#         )
+#
+#     block, lesson = row
+#     return render_template("trivia/page.html", block=block, lesson=lesson,
+#                            subjects=subjects, subject_code=subject_code, q=search_text)
+
+
 @bp.get("/trivia")
 @login_required
 def trivia_page():
@@ -180,41 +254,29 @@ def trivia_page():
     search_text = (request.args.get("q") or "").strip()
     subject_code = (request.args.get("subject") or "").strip() or None
 
+    # Fetch subjects for the filter dropdown
     subjects = (LessonSubject.query
                 .filter(LessonSubject.active.is_(True))
                 .order_by(LessonSubject.name.asc())
                 .all())
 
-    from sqlalchemy import func
+    exclude_id = request.args.get("exclude")  # Capture the current question ID
 
-    alpha = 0.7  # tune: bigger => bad questions disappear faster
-
-    bad_counts = (
-        db.session.query(
-            TriviaBadVote.lesson_block_id.label("block_id"),
-            func.count(TriviaBadVote.id).label("bad_count"),
-        )
-        .group_by(TriviaBadVote.lesson_block_id)
-        .subquery()
-    )
-
-    bad_count = func.coalesce(bad_counts.c.bad_count, 0)
-    weight = func.exp(-alpha * bad_count)
-    weight_safe = func.greatest(weight, 1e-6)
-    score = (-func.ln(func.random())) / weight_safe  # smaller score wins
-
-    # Updated query: Include Curriculum joins
+    # 1. Fetch all eligible blocks (ignoring randomization for a moment)
+    # We maintain your joins to ensure content is from published curricula
     q = (
         db.session.query(LessonBlock, Lesson)
         .join(Lesson, Lesson.id == LessonBlock.lesson_id)
         .join(CurriculumItem, CurriculumItem.lesson_id == Lesson.id)
         .join(Curriculum, Curriculum.id == CurriculumItem.curriculum_id)
-        .outerjoin(bad_counts, bad_counts.c.block_id == LessonBlock.id)
         .filter(
             LessonBlock.type == "quiz_mcq",
-            Curriculum.is_published == True  # Ensure curriculum is public
+            Curriculum.is_published == True
         )
     )
+
+    if exclude_id:
+        q = q.filter(LessonBlock.id != exclude_id)
 
     if subject_code:
         q = q.filter(Lesson.subject_code == subject_code)
@@ -227,23 +289,78 @@ def trivia_page():
             (Lesson.code.ilike(like))
         )
 
-    row = q.order_by(score).first()
+    all_eligible = q.all()
 
-    if not row:
+    if not all_eligible:
         flash("No trivia questions found for that filter.", "info")
-        return render_template(
-            "trivia/page.html",
-            block=None,
-            lesson=None,
-            subjects=subjects,
-            subject_code=subject_code,
-            q=search_text,
-        )
+        return render_template("trivia/page.html", block=None, lesson=None, subjects=subjects,
+                               subject_code=subject_code, q=search_text)
 
-    block, lesson = row
+    # 2. Fetch user performance to calculate Mastery weights
+    # We get the user's answers to calculate how many times they've gotten each question right recently
+    user_answers = (TriviaAnswer.query
+                    .filter_by(user_id=current_user.id)
+                    .order_by(TriviaAnswer.created_at.desc())
+                    .all())
+
+    # Calculate streaks: consecutive correct answers from the most recent attempt
+    mastery_map = {}  # block_id -> streak_count
+    for a in user_answers:
+        if a.lesson_block_id not in mastery_map:
+            mastery_map[a.lesson_block_id] = {"count": 0, "reset": False}
+
+        if not mastery_map[a.lesson_block_id]["reset"]:
+            if a.is_correct:
+                mastery_map[a.lesson_block_id]["count"] += 1
+            else:
+                # User got it wrong at some point; stop counting the streak
+                mastery_map[a.lesson_block_id]["reset"] = True
+
+    # 3. Incorporate your existing "Bad Question" protection
+    # We still want to down-weight questions the community has voted as "bad"
+    bad_counts_query = (
+        db.session.query(
+            TriviaBadVote.lesson_block_id,
+            func.count(TriviaBadVote.id).label("count")
+        )
+        .group_by(TriviaBadVote.lesson_block_id)
+        .all()
+    )
+    bad_map = {row.lesson_block_id: row.count for row in bad_counts_query}
+
+    # 4. Calculate Final Weights
+    population = []
+    weights = []
+    alpha = 0.7  # For bad votes
+
+    for block, lesson in all_eligible:
+
+        # Mastery Decay: 0.25^n (where n is the correct streak)
+        streak = mastery_map.get(block.id, {"count": 0})["count"]
+        mastery_weight = 0.25 ** streak
+
+
+        # Bad Vote Decay
+        bad_count = bad_map.get(block.id, 0)
+        bad_weight = max(current_app.config.get("MIN_WEIGHT", 1e-6), 2.718 ** (-alpha * bad_count))
+
+        # Combine weights
+        final_weight = mastery_weight * bad_weight
+
+        population.append((block, lesson))
+        weights.append(final_weight)
+
+        # Temporary Debug Logging
+        print(f"DEBUG: Question: {lesson.title[:20]}... | Correct Streak: {streak} | Weight: {final_weight:.4f}")
+
+
+    # 5. Perform Weighted Selection
+    import random
+    selected_row = random.choices(population, weights=weights, k=1)[0]
+    block, lesson = selected_row
+
     return render_template("trivia/page.html", block=block, lesson=lesson,
                            subjects=subjects, subject_code=subject_code, q=search_text)
-
 
 
 # WAS IN MAIN!
@@ -271,15 +388,17 @@ def trivia_answer():
     correct_index = int(block.payload_json.get("answer_index", -1))
     is_correct = (choice_index == correct_index)
 
-    # log either way
-    log_event("trivia_answer_submitted", "lesson_block", block.id, {
-        "choice_index": choice_index,
-        "is_correct": bool(is_correct),
-    })
+    # --- NEW: Record the performance for Weighted Sampling ---
+    ans = TriviaAnswer(
+        user_id=current_user.id,
+        lesson_block_id=block.id,
+        chosen_index=choice_index,
+        is_correct=bool(is_correct)
+    )
+    db.session.add(ans)
 
     payout_ticks = 0
     if is_correct:
-
         update_user_streak(current_user)
         db.session.add(current_user)  # Ensure the user object is marked for saving
 
@@ -359,55 +478,122 @@ def trivia_answer():
     return redirect(url_for("appui.trivia_page"))
 
 
-# @bp.post("/trivia/answer")
+
+
+
+# # WAS IN MAIN!
+# @bp.post("/app/trivia/answer")
 # @login_required
 # def trivia_answer():
 #     if not has_access(current_user):
 #         return redirect(url_for("billing.pricing"))
 #
-#     block_id = request.form.get("block_id")
-#     selected_index = request.form.get("choice_index")
-#     subject_code = (request.form.get("subject") or "").strip() or None
-#     search_text = (request.form.get("q") or "").strip() or None
+#     block_id = (request.form.get("block_id") or "").strip()
+#     choice_raw = request.form.get("choice_index")
 #
-#     block = LessonBlock.query.get(block_id)
+#     if not block_id or choice_raw is None:
+#         abort(400)
+#
+#     block = LessonBlock.query.filter_by(id=block_id, type="quiz_mcq").one_or_none()
 #     if not block:
 #         abort(404)
 #
-#     # 1. Check answer
-#     correct_index = block.payload_json.get("correct_index")
-#     is_correct = (str(selected_index) == str(correct_index))
+#     try:
+#         choice_index = int(choice_raw)
+#     except ValueError:
+#         abort(400)
+#
+#     correct_index = int(block.payload_json.get("answer_index", -1))
+#     is_correct = (choice_index == correct_index)
+#
+#     # log either way
+#     log_event("trivia_answer_submitted", "lesson_block", block.id, {
+#         "choice_index": choice_index,
+#         "is_correct": bool(is_correct),
+#     })
 #
 #     payout_ticks = 0
 #     if is_correct:
-#         # 2. Calculate Payout
-#         payout_ticks = 500  # 0.5 AN
 #
-#         # 3. Mint the Reward
-#         system_acc = get_or_create_system_account("treasury")
+#         update_user_streak(current_user)
+#         db.session.add(current_user)  # Ensure the user object is marked for saving
+#
+#         if is_correct:
+#             # 1. Detect if it's a mobile device
+#             user_agent = request.headers.get('User-Agent', '').lower()
+#             is_mobile = any(word in user_agent for word in ['mobile', 'android', 'iphone'])
+#
+#             # 2. Logic: Same expected value (~11 ticks), but capped for UI safety
+#             if is_mobile:
+#                 # We use a tighter distribution that still skews high occasionally
+#                 # Capping at 20 ticks prevents layout breaks in the userpill
+#                 raw_extra = int(random.expovariate(1 / 10.0))
+#                 payout_ticks = 1 + min(19, raw_extra)
+#             else:
+#                 # Standard uncapped desktop logic
+#                 extra = int(random.expovariate(1 / 10.0))
+#                 payout_ticks = 1 + max(0, extra)
+#
+#
+#         # today = datetime.utcnow().date().isoformat()
+#         # key = f"trivia_reward:{current_user.id}:{block.id}:{today}"
+#
+#         import uuid
+#         key = f"trivia_reward:{current_user.id}:{block.id}:{uuid.uuid4().hex}"
+#
+#         # import time
+#         # # Add a timestamp so the key is always unique for testing
+#         # key = f"trivia_reward:{current_user.id}:{block.id}:{today}:{time.time()}"
+#
+#
+#         issuer = get_or_create_system_account("rewards_pool")
 #         user_wallet = get_or_create_user_wallet(current_user.id)
-#         an_asset = get_an_asset()
+#         an = get_an_asset()
+#
+#         # # 4. FLASH MESSAGES (The Confetti Trigger)
+#         # flash("Correct!", "success")
+#         # # This category "reward:..." is what triggers the celebration in base.html
+#         # flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
+#
+#         flash("Correct! " + f"+{payout_ticks} ticks" if payout_ticks else "", f"reward:{payout_ticks}")
 #
 #         post_access_txn(
-#             memo=f"Trivia reward: {block.id}",
+#             event_type="trivia_correct_reward",
+#             idempotency_key=key,
+#             actor_user_id=current_user.id,
+#             context_type="lesson_block",
+#             context_id=block.id,
+#             memo_json={"payout_ticks": payout_ticks},
 #             entries=[
-#                 EntrySpec(account_id=system_acc.id, asset_id=an_asset.id, delta=-payout_ticks),
-#                 EntrySpec(account_id=user_wallet.id, asset_id=an_asset.id, delta=+payout_ticks),
-#             ]
+#                 EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-payout_ticks, entry_type="mint"),
+#                 EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
+#             ],
 #         )
-#
-#         # 4. FLASH MESSAGES (The Confetti Trigger)
-#         flash("Correct!", "success")
-#         # This category "reward:..." is what triggers the celebration in base.html
-#         flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
 #     else:
-#         flash("Nope. Try the next one!", "error")
+#         flash("Nope. Try again!", "error")
+#         # flash(("Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""))
 #
 #     db.session.commit()
 #
-#     # 5. Redirect back to the new weighted trivia page with your search/filters intact
-#     return redirect(url_for("appui.trivia_page", subject=subject_code, q=search_text))
+#     # FORCE a fresh read of the balance after the commit
+#     from app.access_ledger.service import get_user_an_balance_ticks, AN_SCALE
+#     new_ticks = get_user_an_balance_ticks(current_user.id)  #
+#     new_an = new_ticks / AN_SCALE
 #
+#
+#     # If it's an AJAX request (XHR)
+#     if request.headers.get('X-Requested-With') == 'XMLHttpRequest':
+#         return jsonify({
+#             "is_correct": bool(is_correct),
+#             "payout": payout_ticks,
+#             "new_balance_an": f"{new_an:.3f}",
+#             "current_streak": current_user.current_streak,  # Send the new streak count
+#         })
+#
+#     # flash(("Correct! " if is_correct else "Nope. ") + (f"+{payout_ticks} ticks" if payout_ticks else ""), "success" if is_correct else "error")
+#     return redirect(url_for("appui.trivia_page"))
+#
+
 
 
 # WAS IN MAIN!!
@@ -432,93 +618,6 @@ def trivia_bad_vote():
 
 
 
-# @bp.post("/trivia/answer")
-# @login_required
-# def trivia_answer():
-#     if not has_access(current_user):
-#         return redirect(url_for("billing.pricing"))
-#
-#     block_id = (request.form.get("block_id") or "").strip()
-#     choice_raw = request.form.get("choice_index")
-#     subject_code = (request.form.get("subject") or "").strip() or None
-#     search_text = (request.form.get("q") or "").strip() or None
-#
-#     if not block_id or choice_raw is None:
-#         abort(400)
-#
-#     block = LessonBlock.query.filter_by(id=block_id, type="quiz_mcq").one_or_none()
-#     if not block:
-#         abort(404)
-#
-#     try:
-#         choice_index = int(choice_raw)
-#     except ValueError:
-#         abort(400)
-#
-#     correct_index = int(block.payload_json.get("answer_index", -1))
-#     is_correct = (choice_index == correct_index)
-#
-#     base_ticks = 0
-#     if is_correct:
-#         base_ticks = 1 + int(random.expovariate(1 / 10.0))
-#
-#     mult = get_user_level_multiplier(current_user.id)
-#     payout_ticks = int(round(base_ticks * mult))
-#
-#     # Keep “correct” always rewarding at least 1 tick if base > 0
-#     if base_ticks > 0 and payout_ticks <= 0:
-#         payout_ticks = 1
-#
-#     # record attempt
-#     ans = TriviaAnswer(
-#         user_id=current_user.id,
-#         lesson_block_id=block.id,
-#         chosen_index=choice_index,
-#         is_correct=bool(is_correct),
-#         payout_ticks=int(payout_ticks),
-#         subject_code=subject_code,
-#         search_text=search_text,
-#     )
-#     db.session.add(ans)
-#     db.session.flush()  # so ans.id exists
-#
-#     # mint reward idempotently per trivia answer row
-#     if payout_ticks > 0:
-#         issuer = get_or_create_system_account("rewards_pool")
-#         user_wallet = get_or_create_user_wallet(current_user.id)
-#         an = get_an_asset()
-#
-#         post_access_txn(
-#             event_type="trivia_correct_reward",
-#             idempotency_key=f"trivia_answer_reward:{ans.id}",
-#             actor_user_id=current_user.id,
-#             context_type="trivia_answer",
-#             context_id=str(ans.id),
-#             memo_json={
-#                 "base_ticks": base_ticks,
-#                 "mult": mult,
-#                 "payout_ticks": payout_ticks,
-#                 "lesson_block_id": block.id
-#             },
-#             entries=[
-#                 EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-payout_ticks, entry_type="mint"),
-#                 EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
-#             ],
-#         )
-#
-#     db.session.commit()
-#
-#
-#     # Normal correctness feedback
-#     if is_correct:
-#         flash("Correct!", "success")
-#         if payout_ticks > 0:
-#             # special category format: "reward:<ticks>"
-#             flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
-#     else:
-#         flash("Nope.", "error")
-#
-#     return redirect(url_for("appui.trivia_page", subject=subject_code or "", q=search_text or ""))
 
 
 
@@ -537,120 +636,6 @@ def log_event(event_name, entity_type=None, entity_id=None, props=None):
     )
     db.session.add(evt)
     return evt
-
-
-# @bp.post("/app/trivia/answer")
-# @login_required
-# def trivia_answer():
-#     if not has_access(current_user):
-#         return redirect(url_for("billing.pricing"))
-#
-#     block_id = (request.form.get("block_id") or "").strip()
-#     choice_raw = request.form.get("choice_index")
-#     subject_code = (request.form.get("subject") or "").strip() or None
-#     search_text = (request.form.get("q") or "").strip() or None
-#
-#     if not block_id or choice_raw is None:
-#         abort(400)
-#
-#     block = LessonBlock.query.filter_by(id=block_id, type="quiz_mcq").one_or_none()
-#     if not block:
-#         abort(404)
-#
-#     try:
-#         choice_index = int(choice_raw)
-#     except ValueError:
-#         abort(400)
-#
-#     correct_index = int(block.payload_json.get("answer_index", -1))
-#     is_correct = (choice_index == correct_index)
-#
-#     payout_ticks = 0
-#     associated_curs = []  # FIX: Initialize here so it's always accessible
-#
-#     if is_correct:
-#         # 1. Calculate Payout
-#         base_ticks = 1 + int(random.expovariate(1 / 10.0))
-#         mult = get_user_level_multiplier(current_user.id) if 'get_user_level_multiplier' in globals() else 1.0
-#         payout_ticks = int(round(base_ticks * mult))
-#         if payout_ticks <= 0: payout_ticks = 1
-#
-#         # 2. Record the Answer Row
-#         ans = TriviaAnswer(
-#             user_id=current_user.id,
-#             lesson_block_id=block.id,
-#             chosen_index=choice_index,
-#             is_correct=True,
-#             payout_ticks=payout_ticks,
-#             subject_code=subject_code,
-#             search_text=search_text,
-#         )
-#         db.session.add(ans)
-#         db.session.flush()
-#
-#         # 3. Handle Ledger & Curriculum Bonuses
-#         issuer = get_or_create_system_account("rewards_pool")
-#         user_wallet = get_or_create_user_wallet(current_user.id)
-#         an = get_an_asset()
-#
-#         entries = [
-#             EntrySpec(account_id=user_wallet.id, asset_id=an.id, delta=+payout_ticks, entry_type="mint"),
-#         ]
-#
-#         curriculum_bonus_total = 0
-#         bonus_per_cur = int(round(payout_ticks * 0.10))
-#
-#         # Find every curriculum that includes the lesson this block belongs to
-#         associated_curs = (Curriculum.query
-#                            .join(CurriculumItem)
-#                            .filter(CurriculumItem.lesson_id == block.lesson_id)
-#                            .all())
-#
-#         if bonus_per_cur > 0:
-#             for cur in associated_curs:
-#                 if cur.wallet_account_id:
-#                     curriculum_bonus_total += bonus_per_cur
-#                     entries.append(
-#                         EntrySpec(
-#                             account_id=cur.wallet_account_id,
-#                             asset_id=an.id,
-#                             delta=+bonus_per_cur,
-#                             entry_type="mint"
-#                         )
-#                     )
-#
-#         total_minted = payout_ticks + curriculum_bonus_total
-#         entries.insert(0, EntrySpec(account_id=issuer.id, asset_id=an.id, delta=-total_minted, entry_type="mint"))
-#
-#         post_access_txn(
-#             event_type="trivia_correct_reward",
-#             idempotency_key=f"trivia_answer_reward:{ans.id}",
-#             actor_user_id=current_user.id,
-#             context_type="trivia_answer",
-#             context_id=str(ans.id),
-#             memo_json={
-#                 "payout_ticks": payout_ticks,
-#                 "curriculum_bonus_total": curriculum_bonus_total,
-#                 "num_curs_paid": len(associated_curs)
-#             },
-#             entries=entries,
-#         )
-#
-#     db.session.commit()
-#
-#     # 4. Flash Feedback (Confetti Trigger)
-#     if is_correct:
-#         flash("Correct!", "success")
-#         if payout_ticks > 0:
-#             # The category format "reward:NUMBER" triggers the celebration animation
-#             flash(f"+{payout_ticks} ticks", f"reward:{payout_ticks}")
-#     else:
-#         flash("Nope.", "error")
-#
-#     return redirect(url_for("appui.trivia_page", subject=subject_code or "", q=search_text or ""))
-#
-
-
 
 
 

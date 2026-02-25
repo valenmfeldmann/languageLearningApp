@@ -86,7 +86,17 @@
                     <option value="lesson" {% if it.item_type == "lesson" %}selected{% endif %}>lesson</option>
                   </select>
                 </td>
+
+
                 <td><input type="text" name="phase_title" class="phase-title" value="{{ it.phase_title or '' }}" placeholder="Phase name" style="width: 100%; padding: 8px;"></td>
+
+
+<!--                <td>-->
+<!--                  <textarea name="phase_title" -->
+<!--                            class="phase-title" -->
+<!--                            placeholder="# Section Header\n**Objective:** Learn Basics" -->
+<!--                            style="width: 100%; padding: 8px; background: #000; color: var(&#45;&#45;link); border: 1px solid #444; min-height: 45px;">{{ it.phase_title or '' }}</textarea>-->
+<!--                </td>-->
 
 
                 <td style="padding: 10px;">
@@ -258,6 +268,7 @@
     return `{% for L in lessons %}<option value="{{ L.id }}">{{ L.title|e }}</option>{% endfor %}`;
   }
 
+
   function phaseRowHtml() {
     return `
       <tr class="item-row">
@@ -268,7 +279,18 @@
             <option value="lesson">lesson</option>
           </select>
         </td>
-        <td><input type="text" name="phase_title" class="phase-title" placeholder="Phase name" style="width: 100%; padding: 8px;"></td>
+        <td>
+          <div style="position: relative;">
+            <textarea name="phase_title" class="phase-title"
+                      placeholder="# Main Title (Centered) or ## Sub-phase (Left)"
+                      style="width: 100%; padding: 8px; height: 50px;"></textarea>
+            <div style="font-size: 10px; color: var(--muted); margin-top: 2px;">
+              # = Center Header | ## = Left Milestone
+            </div>
+          </div>
+        </td>
+
+
         <td>
           <div class="lesson-wrap">
             <input type="text" class="lesson-search-input" list="lesson-datalist" oninput="filterLessonSearch(this)" placeholder="Search..." style="width: 100%; padding: 8px;">

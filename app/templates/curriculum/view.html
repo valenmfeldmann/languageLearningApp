@@ -366,9 +366,8 @@
 
 
 
-
   <style>
-    /* The Container Wrap */
+    /* 1. General Container & Track Logic */
     .curriculum-container {
       margin-top: 24px;
       background: rgba(255, 255, 255, 0.02);
@@ -383,7 +382,7 @@
       padding-left: 24px;
     }
 
-    /* The vertical progress line - adjusted for better contrast */
+    /* The vertical progress line */
     .curriculum-track::before {
       content: '';
       position: absolute;
@@ -399,27 +398,61 @@
       z-index: 1;
     }
 
-    .phase-header {
+    /* 2. Hybrid Phase Logic */
+    .phase-row {
+      margin: 32px 0 16px 0;
+      width: 100%;
       position: relative;
-      z-index: 2; /* Sits above the line */
-      margin: 32px 0 16px -32px; /* Pulls left to "break" the line */
-      display: flex;
-      align-items: center;
+      z-index: 2;
     }
 
-    .phase-header h3 {
-      background: var(--bg); /* Matches page background to "cut" the line */
+    /* MAIN HEADER (# Title): Centered & Full Width */
+    .phase-content:has(h1) {
+      text-align: center;
+      display: block;
+    }
+
+
+    .phase-content h1 {
+        display: block;              /* Changed from inline-block to span full width */
+        background: var(--bg);       /* Cuts the vertical progress line */
+        color: var(--link);
+        padding: 16px 20px;          /* Slightly more vertical breathing room */
+        font-size: 1.6rem;
+        font-weight: 900;
+        text-transform: uppercase;
+        letter-spacing: 2px;
+        border-top: 1px solid rgba(168, 199, 255, 0.2);
+        border-bottom: 1px solid rgba(168, 199, 255, 0.2);
+        margin: 0;                   /* Reset any default markdown margins */
+        width: 100%;                 /* Ensures it fills the track width */
+        box-sizing: border-box;
+    }
+
+
+    /* SUB-PHASE (## Title or text): Left-aligned on the track */
+    .phase-content:not(:has(h1)) {
+      text-align: left;
+      margin-left: -32px;
+    }
+
+    .phase-content h2,
+    .phase-content p {
+      display: inline-block;
+      background: var(--bg);
+      padding: 4px 16px;
+      border: 2px solid rgba(168, 199, 255, 0.3);
+      border-radius: 50px;
       color: var(--link);
-      padding: 6px 20px;
-      border-radius: 50px; /* Pill shape */
       font-size: 0.85rem;
       font-weight: 800;
       text-transform: uppercase;
-      letter-spacing: 1.5px;
-      border: 2px solid rgba(168, 199, 255, 0.3);
-      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.4);
+      letter-spacing: 1px;
+      box-shadow: 0 4px 10px rgba(0, 0, 0, 0.3);
+      margin: 0;
     }
 
+    /* 3. Lesson Cards */
     .lesson-card {
       position: relative;
       z-index: 2;
@@ -453,7 +486,6 @@
       font-weight: bold;
       border: 2px solid rgba(255, 255, 255, 0.15);
       background: #000;
-      transition: all 0.3s ease;
     }
 
     .status-done {
@@ -463,15 +495,21 @@
       box-shadow: 0 0 10px rgba(168, 199, 255, 0.4);
     }
 
-    /* ... rest of your lesson-info / lesson-meta styles ... */
+    .lesson-info { flex: 1; }
+    .lesson-title { display: block; font-weight: bold; margin-bottom: 2px; }
+    .lesson-meta { font-size: 0.8rem; display: flex; gap: 10px; }
   </style>
+
+
 
   <div class="curriculum-container">
     <div class="curriculum-track">
       {% for it in items %}
         {% if it.kind == "phase" %}
-          <div class="phase-header">
-            <h3>{{ it.title }}</h3>
+          <div class="phase-row">
+            <div class="phase-content">
+              {{ it.html_content }}
+            </div>
           </div>
 
         {% elif it.kind == "lesson" %}

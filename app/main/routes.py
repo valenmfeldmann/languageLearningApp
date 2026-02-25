@@ -50,8 +50,9 @@ from app.models import Curriculum, UserCurriculumStar
 import os
 from flask import current_app
 import sqlalchemy as sa
-
-
+from app.author.routes import sanitize_html # Assuming your sanitizer is in the author blueprint
+import markdown
+from markupsafe import Markup
 
 
 TREASURY_ACCOUNT_ID = "treasury"
@@ -889,8 +890,15 @@ def curriculum_view(curriculum_code: str):
 
     for it in items:
         if it.item_type == "phase":
-            display.append({"kind": "phase", "title": it.phase_title or "Phase"})
-            continue
+            raw_md = it.phase_title or ""
+            rendered_html = markdown.markdown(raw_md, extensions=['extra', 'nl2br'])
+            safe_html = Markup(sanitize_html(rendered_html))
+
+            # Wrap it in a div that our CSS can target
+            display.append({
+                "kind": "phase",
+                "html_content": safe_html
+            })
 
         if it.item_type == "lesson" and it.lesson_id:
             seen[it.lesson_id] += 1

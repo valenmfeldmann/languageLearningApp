@@ -376,10 +376,66 @@ def _save_zip_assets_to_lesson(z, info_list, lesson_id, folder_prefix):
         ))
 
 
+# @bp.post("/curriculum/<curriculum_id>/batch_import")
+# @login_required
+# def curriculum_batch_import(curriculum_id):
+#     """Processes a single ZIP containing multiple lesson sub-folders."""
+#     _require_curriculum_perm(curriculum_id, need_edit=True)
+#     master_zip_fs = request.files.get("master_zip")
+#
+#     if not master_zip_fs:
+#         return jsonify({"error": "No ZIP file provided"}), 400
+#
+#     try:
+#         with zipfile.ZipFile(master_zip_fs) as z:
+#             # Find every 'lesson.json' in the ZIP
+#             json_paths = [i.filename for i in z.infolist() if i.filename.endswith('lesson.json')]
+#
+#             for path in json_paths:
+#                 folder_prefix = path.rsplit('lesson.json', 1)[0]
+#
+#                 with z.open(path) as f:
+#                     payload = json.loads(f.read())
+#                     payload = _validate_lesson_payload(payload)
+#
+#                 # 1. Create/Update Lesson
+#                 lesson = Lesson.query.filter_by(code=payload["code"]).one_or_none()
+#                 if not lesson:
+#                     lesson = Lesson(code=payload["code"], created_by_user_id=current_user.id)
+#                     db.session.add(lesson)
+#
+#                 lesson.title = payload["title"]
+#                 db.session.flush()
+#
+#                 # 2. Cleanup and Save Assets
+#                 LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+#                 LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+#
+#                 lesson_assets = [i for i in z.infolist()
+#                                  if i.filename.startswith(folder_prefix + "assets/") and not i.is_dir()]
+#                 _save_zip_assets_to_lesson(z, lesson_assets, lesson.id, folder_prefix)
+#
+#                 # 3. Create Blocks
+#                 for idx, b in enumerate(payload.get("blocks", [])):
+#                     db.session.add(LessonBlock(lesson_id=lesson.id, position=idx,
+#                                                type=b["type"], payload_json=b["payload"]))
+#
+#                 # 4. Link to Curriculum
+#                 _append_lesson_to_curriculum(lesson.id, curriculum_id)
+#
+#         db.session.commit()
+#         return jsonify({"success": True})
+#     except Exception as e:
+#         db.session.rollback()
+#         return jsonify({"error": str(e)}), 500
+
+
+
+
+
 @bp.post("/curriculum/<curriculum_id>/batch_import")
 @login_required
 def curriculum_batch_import(curriculum_id):
-    """Processes a single ZIP containing multiple lesson sub-folders."""
     _require_curriculum_perm(curriculum_id, need_edit=True)
     master_zip_fs = request.files.get("master_zip")
 
@@ -388,40 +444,60 @@ def curriculum_batch_import(curriculum_id):
 
     try:
         with zipfile.ZipFile(master_zip_fs) as z:
-            # Find every 'lesson.json' in the ZIP
-            json_paths = [i.filename for i in z.infolist() if i.filename.endswith('lesson.json')]
+            # 1. Look for manifest.json
+            manifest_path = next((i.filename for i in z.infolist() if i.filename.endswith('manifest.json')), None)
 
-            for path in json_paths:
-                folder_prefix = path.rsplit('lesson.json', 1)[0]
+            # 2. Clear existing items to rebuild the curriculum
+            CurriculumItem.query.filter_by(curriculum_id=curriculum_id).delete()
+            db.session.flush()
 
-                with z.open(path) as f:
-                    payload = json.loads(f.read())
-                    payload = _validate_lesson_payload(payload)
+            if manifest_path:
+                # 1. Determine if there is a wrapper folder prefix
+                # If manifest is at 'Folder/manifest.json', prefix is 'Folder/'
+                wrapper_prefix = manifest_path.rsplit('manifest.json', 1)[0]
 
-                # 1. Create/Update Lesson
-                lesson = Lesson.query.filter_by(code=payload["code"]).one_or_none()
-                if not lesson:
-                    lesson = Lesson(code=payload["code"], created_by_user_id=current_user.id)
-                    db.session.add(lesson)
+                with z.open(manifest_path) as f:
+                    manifest = json.loads(f.read())
 
-                lesson.title = payload["title"]
-                db.session.flush()
+                for idx, item_data in enumerate(manifest.get("items", [])):
+                    if item_data["type"] == "phase":
+                        db.session.add(CurriculumItem(
+                            curriculum_id=curriculum_id,
+                            position=idx,
+                            item_type="phase",
+                            phase_title=item_data.get("title")
+                        ))
+                    elif item_data["type"] == "lesson":
+                        # 2. Automatically prepend the wrapper prefix to the lesson path
+                        lesson_rel_path = item_data["path"]
+                        full_archive_path = wrapper_prefix + lesson_rel_path
 
-                # 2. Cleanup and Save Assets
-                LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
-                LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+                        # Use the full path to locate the folder prefix for assets
+                        folder_prefix = full_archive_path.rsplit('lesson.json', 1)[0]
 
-                lesson_assets = [i for i in z.infolist()
-                                 if i.filename.startswith(folder_prefix + "assets/") and not i.is_dir()]
-                _save_zip_assets_to_lesson(z, lesson_assets, lesson.id, folder_prefix)
+                        with z.open(full_archive_path) as lf:
+                            payload = json.loads(lf.read())
 
-                # 3. Create Blocks
-                for idx, b in enumerate(payload.get("blocks", [])):
-                    db.session.add(LessonBlock(lesson_id=lesson.id, position=idx,
-                                               type=b["type"], payload_json=b["payload"]))
+                        lesson = _import_single_lesson_logic(z, payload, folder_prefix, current_user.id)
 
-                # 4. Link to Curriculum
-                _append_lesson_to_curriculum(lesson.id, curriculum_id)
+                        db.session.add(CurriculumItem(
+                            curriculum_id=curriculum_id,
+                            position=idx,
+                            item_type="lesson",
+                            lesson_id=lesson.id
+                        ))
+
+            else:
+                # --- SCENARIO B: FALLBACK (FIND ALL LESSONS) ---
+                json_paths = [i.filename for i in z.infolist() if i.filename.endswith('lesson.json')]
+                for idx, path in enumerate(json_paths):
+                    folder_prefix = path.rsplit('lesson.json', 1)[0]
+                    with z.open(path) as f:
+                        payload = json.loads(f.read())
+
+                    lesson = _import_single_lesson_logic(z, payload, folder_prefix, current_user.id)
+                    # Use existing helper to append to end
+                    _append_lesson_to_curriculum(lesson.id, curriculum_id)
 
         db.session.commit()
         return jsonify({"success": True})
@@ -429,6 +505,39 @@ def curriculum_batch_import(curriculum_id):
         db.session.rollback()
         return jsonify({"error": str(e)}), 500
 
+
+def _import_single_lesson_logic(z, payload, folder_prefix, user_id):
+    """Refactored helper to handle lesson upsert and asset saving."""
+    payload = _validate_lesson_payload(payload)
+
+    # 1. Upsert Lesson
+    lesson = Lesson.query.filter_by(code=payload["code"]).one_or_none()
+    if not lesson:
+        lesson = Lesson(code=payload["code"], created_by_user_id=user_id)
+        db.session.add(lesson)
+
+    lesson.title = payload["title"]
+    db.session.flush()
+
+    # 2. Cleanup and Save Assets
+    LessonBlock.query.filter_by(lesson_id=lesson.id).delete()
+    LessonAsset.query.filter_by(lesson_id=lesson.id).delete()
+
+    # Extract only the assets belonging to this lesson's folder
+    lesson_assets = [i for i in z.infolist()
+                     if i.filename.startswith(folder_prefix + "assets/") and not i.is_dir()]
+    _save_zip_assets_to_lesson(z, lesson_assets, lesson.id, folder_prefix)
+
+    # 3. Create Blocks
+    for idx, b in enumerate(payload.get("blocks", [])):
+        db.session.add(LessonBlock(
+            lesson_id=lesson.id,
+            position=idx,
+            type=b["type"],
+            payload_json=b["payload"]
+        ))
+
+    return lesson
 
 
 def process_master_zip(zip_fs, curriculum_id, user_id):

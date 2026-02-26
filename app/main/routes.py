@@ -2,24 +2,21 @@ from app.author.routes import _require_curriculum_perm
 from app.billing.access import has_access
 from app.billing.access import access_status
 from flask import Blueprint
-from app.models import _uuid, AccessAccount, LessonSubject, CurriculumEditor, User
+from app.models import _uuid, AccessAccount, LessonSubject, CurriculumEditor
 from app.access_ledger.service import (
     get_or_create_system_account,
     post_access_txn,
     EntrySpec,
 )
-from flask import render_template, abort
-from sqlalchemy import case
+from flask import render_template
 from app.models import (
-    Curriculum,
     CurriculumItem,
     Lesson,
     LessonCompletion,
     LessonBlock,
     LessonBlockProgress,
 )
-from flask import request, jsonify
-from app.extensions import db
+from flask import jsonify
 from app.models import LessonAttempt
 from collections import defaultdict
 from app.models import CurriculumOwner
@@ -32,27 +29,24 @@ from app.access_ledger.service import (
 from app.models import CurriculumOrder
 from app.access_ledger.service import InsufficientFunds
 from flask import has_request_context
-from app.models import AnalyticsEvent
 from sqlalchemy import func
 from app.models import AccessBalance
-from datetime import datetime
 from zoneinfo import ZoneInfo
 from flask import session
-from flask import redirect, url_for, flash
-from flask_login import login_required, current_user
+from flask import flash
 from sqlalchemy import desc
-import math, random
 from datetime import datetime
-from flask import abort, redirect, request, url_for
+from flask import abort
 from flask_login import login_required, current_user
-from app.extensions import db
 from app.models import Curriculum, UserCurriculumStar
 import os
-from flask import current_app
 import sqlalchemy as sa
 from app.author.routes import sanitize_html # Assuming your sanitizer is in the author blueprint
 import markdown
 from markupsafe import Markup
+from flask import request, redirect, url_for
+from app.models import AnalyticsEvent
+from app.extensions import db
 
 
 TREASURY_ACCOUNT_ID = "treasury"
@@ -258,12 +252,31 @@ def billing_status():
     })
 
 
+# @bp.get("/")
+# def home():
+#     return redirect(url_for("auth.login"))
+#     # return {"ok": True}
+
+
+
+
 @bp.get("/")
 def home():
+    # Detect brand for A/B tracking
+    active_domain = request.host.lower().replace("www.", "")
+
+    # Log the event to your database
+    new_event = AnalyticsEvent(
+        event_type="landing_page_view",
+        entity_type="brand_test",
+        entity_id=active_domain,
+        props_json={"referrer": request.referrer}
+    )
+    db.session.add(new_event)
+    db.session.commit()
+
+    # Continue with your existing auth flow
     return redirect(url_for("auth.login"))
-    # return {"ok": True}
-
-
 
 
 

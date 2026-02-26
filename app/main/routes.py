@@ -48,7 +48,6 @@ from flask import request, redirect, url_for
 from app.models import AnalyticsEvent
 from app.extensions import db
 
-
 TREASURY_ACCOUNT_ID = "treasury"
 MAX_AN = 10
 A = 15  # minutes to reach half saturation
@@ -260,12 +259,16 @@ def billing_status():
 
 
 
+
+
 @bp.get("/")
 def home():
-    # Detect brand for A/B tracking
-    active_domain = request.host.lower().replace("www.", "")
+    # 1. Detect which brand the user is visiting
+    # We strip 'www.' and any port numbers to keep the data clean
+    active_domain = request.host.lower().replace("www.", "").split(":")[0]
 
-    # Log the event to your database
+    # 2. Log the event to your database
+    # This replaces the need for an external 'log_brand_event' function
     new_event = AnalyticsEvent(
         event_type="landing_page_view",
         entity_type="brand_test",
@@ -275,9 +278,8 @@ def home():
     db.session.add(new_event)
     db.session.commit()
 
-    # Continue with your existing auth flow
+    # 3. Continue with your existing auth flow
     return redirect(url_for("auth.login"))
-
 
 
 

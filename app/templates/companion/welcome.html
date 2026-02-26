@@ -11,7 +11,11 @@
     </div>
 
     <p style="font-size: 1.4rem; line-height: 1.6; color: var(--text); margin-bottom: 40px; min-height: 80px;">
-        "{{ stage_data.text }}"
+        {% if stage == 1 %}
+            "Welcome to {{ brand_display }}! I'm here to help you master your goals."
+        {% else %}
+            "{{ stage_data.text }}"
+        {% endif %}
     </p>
 
     <form action="{{ url_for('companion.welcome_next', current_stage=stage) }}" method="POST">

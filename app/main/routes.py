@@ -257,7 +257,25 @@ def billing_status():
 #     # return {"ok": True}
 
 
+# app/main/routes.py
 
+@bp.app_context_processor
+def inject_active_brand():
+    # Detect domain, strip 'www.' and ports
+    brand = request.host.lower().replace("www.", "").split(":")[0]
+
+    # Mapping for clean display names
+    display_map = {
+        'lingofox.org': 'LingoFox',
+        'fluenzy.org': 'Fluenzy',
+        'vulpesed.com': 'VulpisEd',
+        'gamifylearning.org': 'GamifyLearning'
+    }
+
+    return {
+        'active_brand': brand,
+        'brand_display': display_map.get(brand, 'GamifyLearning')
+    }
 
 
 

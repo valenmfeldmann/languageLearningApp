@@ -923,16 +923,15 @@
   <header>
     <div class="topbar">
       <a class="brand" href="{{ url_for('main.app_home') }}">
-        <img src="{{ url_for('static', filename='favicon.png') }}"
-                 style="width: 100px; height: 100px; border-radius: 8px; object-fit: cover;">
+          <img src="{{ url_for('static', filename='favicon.png') }}"
+               style="width: 100px; height: 100px; border-radius: 8px; object-fit: cover;">
 
-        <span>
-          GamifyLearning (Beta)
-          <small class="muted">by Hope students</small>
-          <small class="muted">for Hope students</small>
-        </span>
+          <span>
+              {{ brand_display }} (Beta)
+              <small class="muted">by Hope students</small>
+              <small class="muted">for Hope students</small>
+          </span>
       </a>
-
 
 
 

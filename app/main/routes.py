@@ -268,7 +268,7 @@ def inject_active_brand():
     display_map = {
         'lingofox.org': 'LingoFox',
         'fluenzy.org': 'Fluenzy',
-        'vulpesed.com': 'VulpisEd',
+        'vulpesed.com': 'VulpesEd',
         'gamifylearning.org': 'GamifyLearning'
     }
 

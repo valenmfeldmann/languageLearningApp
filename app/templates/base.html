@@ -941,8 +941,9 @@
       <nav class="nav-links">
         <div class="nav-group-main">
           <a class="navlink" href="{{ url_for('main.app_home') }}">Home</a>
-          <a class="navlink" href="{{ url_for('appui.trivia_page') }}">Trivia</a>
           <a class="navlink" href="{{ url_for('companion.view_garden') }}">Garden</a>
+          <a class="navlink" href="{{ url_for('appui.feedback_page') }}">Suggestions</a>
+<!--          <a class="navlink" href="{{ url_for('appui.trivia_page') }}">Trivia</a>-->
 
           {% if last_curriculum_code %}
             <a class="navlink" href="{{ url_for('main.curriculum_view', curriculum_code=last_curriculum_code) }}">Continue</a>

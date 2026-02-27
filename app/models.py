@@ -227,6 +227,33 @@ class AnalyticsEvent(db.Model):
     props_json = db.Column(db.JSON, nullable=True)
 
 
+# app/models.py
+
+class FeedbackPost(db.Model):
+    __tablename__ = 'feedback_post'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey('user.id'), nullable=False)  # Must be String!
+    title = db.Column(db.String(200), nullable=False)
+    content = db.Column(db.Text, nullable=False)
+    is_resolved = db.Column(db.Boolean, default=False)
+    created_at = db.Column(db.DateTime, default=datetime.utcnow)
+
+    # Relationships
+    author = db.relationship('User', backref='feedback_posts')
+    # Use the string name 'FeedbackVote' here
+    votes = db.relationship('FeedbackVote', backref='post', cascade="all, delete-orphan")
+
+
+class FeedbackVote(db.Model):  # FIXED: Changed from db.Column to db.Model
+    __tablename__ = 'feedback_vote'
+    id = db.Column(db.Integer, primary_key=True)
+    user_id = db.Column(db.String, db.ForeignKey('user.id'), nullable=False)  # Must be String!
+    post_id = db.Column(db.Integer, db.ForeignKey('feedback_post.id'), nullable=False)
+    value = db.Column(db.Integer, nullable=False)  # 1 for upvote, -1 for downvote
+
+
+
+
 
 class LessonAttempt(db.Model):
     __tablename__ = "lesson_attempt"

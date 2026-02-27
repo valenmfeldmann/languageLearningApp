@@ -4,7 +4,7 @@ from flask_login import login_required, current_user
 
 from . import bp  # 👈 THIS is the missing line
 
-from app.models import Subscription, Plan, Curriculum, CurriculumItem
+from app.models import Subscription, Plan, Curriculum, CurriculumItem, FeedbackPost, FeedbackVote
 from app.billing.access import has_access, get_credit_balance_cents
 from app.billing.pricing import buddy_discount_multiplier
 from .portfolio import get_user_portfolio_view
@@ -640,3 +640,70 @@ def update_user_streak(user):
         user.current_streak = 1
 
     user.last_activity_date = today
+
+
+
+
+@bp.route("/feedback", methods=["GET", "POST"])  # Add both methods here
+@login_required
+def feedback_page():
+    # 1. Handle Form Submission (The POST part)
+    if request.method == "POST":
+        title = request.form.get("title", "").strip()
+        content = request.form.get("content", "").strip()
+
+        if title and content:
+            new_post = FeedbackPost(
+                user_id=current_user.id,
+                title=title,
+                content=content
+            )
+            db.session.add(new_post)
+            db.session.commit()
+            flash("Suggestion submitted! Thanks for helping us grow.", "success")
+        return redirect(url_for('appui.feedback_page'))
+
+    # 2. Handle Page Viewing (The GET part)
+    resolved_view = request.args.get("view") == "resolved"
+
+
+    posts_raw = (db.session.query(FeedbackPost, func.sum(FeedbackVote.value).label('score'))
+                 .outerjoin(FeedbackVote)
+                 .filter(FeedbackPost.is_resolved == resolved_view)
+                 .group_by(FeedbackPost.id)
+                 .order_by(db.text('score DESC'))
+                 .all())
+
+    # Create a map of the current user's votes: post_id -> vote_value
+    user_votes = {v.post_id: v.value for v in FeedbackVote.query.filter_by(user_id=current_user.id).all()}
+
+    return render_template("app/feedback.html", posts=posts_raw, user_votes=user_votes, resolved_view=resolved_view)
+
+
+
+@bp.post("/feedback/vote/<int:post_id>/<val>")
+@login_required
+def feedback_vote(post_id, val):
+    try:
+        val = int(val)
+    except ValueError:
+        abort(400)
+
+    val = 1 if val > 0 else -1
+    vote = FeedbackVote.query.filter_by(user_id=current_user.id, post_id=post_id).first()
+
+    if vote:
+        # 1. LOCK: If they click the same arrow, do nothing.
+        # This prevents accidental double-tap retractions.
+        if vote.value == val:
+            pass
+        else:
+            # 2. CLEAR: If they click the opposite arrow, they are retracting.
+            # This forces them to 'undo' their previous stance before switching.
+            db.session.delete(vote)
+    else:
+        # 3. COMMIT: Fresh vote for a new opinion.
+        db.session.add(FeedbackVote(user_id=current_user.id, post_id=post_id, value=val))
+
+    db.session.commit()
+    return redirect(url_for('appui.feedback_page'))

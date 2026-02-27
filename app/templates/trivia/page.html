@@ -59,7 +59,7 @@
 
   {% if back_to_lesson %}
       <div style="margin-bottom: 20px;">
-          <a href="{{ url_for('main.lesson_page', lesson_code=back_to_lesson) }}" class="btn" style="opacity: 0.8;">
+          <a href="{{ url_for('main.lesson_page', lesson_code=back_to_lesson, curriculum=back_to_curriculum) }}" class="btn" style="opacity: 0.8;">
               &larr; Back to Lesson
           </a>
       </div>
@@ -93,7 +93,7 @@
         </div>
         <form method="post" action="{{ url_for('appui.trivia_answer') }}" class="trivia-grid">
           <input type="hidden" name="block_id" value="{{ block.id }}">
-
+          <input type="hidden" name="curriculum" value="{{ back_to_curriculum or '' }}">
           <input type="hidden" name="from_lesson" value="{{ back_to_lesson or '' }}">
           <input type="hidden" name="subject" value="{{ subject_code or '' }}">
           <input type="hidden" name="q" value="{{ q or '' }}">

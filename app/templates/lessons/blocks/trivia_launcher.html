@@ -11,6 +11,7 @@
 
     <a href="{{ url_for('appui.trivia_page',
                     from_lesson=lesson.code,
+                    curriculum=back_to_curriculum,
                     q=p.get('query', '')) }}"
        class="btn primary" style="padding: 12px 24px; font-size: 16px; text-decoration: none;">
        Launch Trivia Session &rarr;

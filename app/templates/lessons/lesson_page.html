@@ -36,7 +36,14 @@
 {% block content %}
 <div class="lesson-container lesson-shell panel">
 
-
+  {% if back_to_curriculum %}
+      <div style="margin-bottom: 20px;">
+          <a href="{{ url_for('main.curriculum_view', curriculum_code=back_to_curriculum) }}"
+             class="btn" style="opacity: 0.8; font-size: 13px;">
+              &larr; Back to Curriculum
+          </a>
+      </div>
+  {% endif %}
 
 
   <header style="margin-bottom: 30px; display: flex; justify-content: space-between; align-items: flex-start;">

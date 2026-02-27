@@ -300,6 +300,7 @@ def trivia_page():
     subject_code = (request.args.get("subject") or "").strip() or None
     back_to_lesson = request.args.get("from_lesson")
     exclude_id = request.args.get("exclude")
+    back_to_curriculum = request.args.get("curriculum")
 
     # RESTORED: Fetch subjects for the filter dropdown
     subjects = (LessonSubject.query
@@ -414,6 +415,7 @@ def trivia_page():
     return render_template("trivia/page.html",
                            block=block, lesson=lesson, subjects=subjects,
                            subject_code=subject_code, q=search_text,
+                           back_to_curriculum=back_to_curriculum,
                            back_to_lesson=back_to_lesson)
 
 
@@ -544,6 +546,7 @@ def trivia_answer():
     return redirect(url_for("appui.trivia_page",
                             from_lesson=back_to_lesson,
                             subject=subject_code,
+                            curriculum=request.form.get("curriculum"),
                             q=search_text))
 
 

@@ -732,6 +732,7 @@ def lesson_page(lesson_code):
         can_complete=can_complete,
         attempt=attempt,  # <-- critical for hidden inputs
         is_author=is_author,
+        back_to_curriculum=curriculum_code  # <--- ADD THIS LINE
     )
 
 

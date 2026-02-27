@@ -8,8 +8,12 @@
       {{ p.get("description", "Ready to test what you just learned? Launch a trivia session now.") }}
     </p>
 
-    <a href="{{ url_for('appui.trivia_page', q=p.get('query', ''), subject=p.get('subject', '')) }}"
+
+    <a href="{{ url_for('appui.trivia_page',
+                    from_lesson=lesson.code,
+                    q=p.get('query', '')) }}"
        class="btn primary" style="padding: 12px 24px; font-size: 16px; text-decoration: none;">
        Launch Trivia Session &rarr;
     </a>
+
 </div>

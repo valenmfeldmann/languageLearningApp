@@ -44,13 +44,34 @@
     border-radius: 10px;
     margin-bottom: 8px;
   }
+
+
+  .btn[style*="opacity: 0.8"]:hover {
+    opacity: 1 !important;
+    background: rgba(255,255,255,0.1);
+  }
+
 </style>
 
 <div style="max-width: 760px; margin: 0 auto; padding: 24px;">
   <h1>Trivia</h1>
 
+
+  {% if back_to_lesson %}
+      <div style="margin-bottom: 20px;">
+          <a href="{{ url_for('main.lesson_page', lesson_code=back_to_lesson) }}" class="btn" style="opacity: 0.8;">
+              &larr; Back to Lesson
+          </a>
+      </div>
+  {% endif %}
+
+
   <form method="get" action="{{ url_for('appui.trivia_page') }}"
         style="display:flex; gap:8px; margin: 12px 0; flex-wrap:wrap; align-items:center;">
+    {% if back_to_lesson %}
+        <input type="hidden" name="from_lesson" value="{{ back_to_lesson }}">
+    {% endif %}
+
     <select name="subject" class="dark-field">
       <option value="">All subjects</option>
       {% for s in subjects %}
@@ -72,12 +93,18 @@
         </div>
         <form method="post" action="{{ url_for('appui.trivia_answer') }}" class="trivia-grid">
           <input type="hidden" name="block_id" value="{{ block.id }}">
+
+          <input type="hidden" name="from_lesson" value="{{ back_to_lesson or '' }}">
+          <input type="hidden" name="subject" value="{{ subject_code or '' }}">
+          <input type="hidden" name="q" value="{{ q or '' }}">
+
           {% for c in block.payload_json.get("choices", []) %}
             <button type="button" class="choice-btn" name="choice_index" value="{{ loop.index0 }}">
               {{ render_typed(c, lesson.id) }}
             </button>
           {% endfor %}
         </form>
+
       </div>
     {% endif %}
   </div>

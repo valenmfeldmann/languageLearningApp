@@ -1,37 +1,50 @@
 {% extends "base.html" %}
 {% block content %}
-<div style="max-width: 800px; margin: 100px auto; text-align: center; padding: 20px;">
-    <div style="font-size: 64px; margin-bottom: 20px;">🦊</div>
-    <h1 style="font-size: 3rem; margin-bottom: 10px;">Master Languages Through Community Trivia</h1>
-    <p style="font-size: 1.25rem; color: var(--muted); margin-bottom: 40px; line-height: 1.6;">
-        Join a community-driven ecosystem where you learn vocabulary, 
-        earn rewards, and help build the world's most effective curriculum. 
-        Simple, addictive, and 100% free to start.
+<div style="max-width: 900px; margin: 80px auto; text-align: center; padding: 20px;">
+    <div style="font-size: 64px; margin-bottom: 20px; filter: drop-shadow(0 0 15px rgba(168,199,255,0.3));">🦊</div>
+    <h1 style="font-size: 3.5rem; margin-bottom: 15px; letter-spacing: -1px; font-weight: 900;">Master Languages Through Community Trivia</h1>
+    <p style="font-size: 1.35rem; color: var(--muted); margin-bottom: 45px; line-height: 1.6; max-width: 650px; margin-left: auto; margin-right: auto;">
+        Join a community-driven ecosystem where you learn vocabulary,
+        earn rewards, and help build the world's most effective curriculum.
     </p>
 
-    <div style="display: flex; flex-direction: column; align-items: center; gap: 20px;">
-
-        <a href="{{ url_for('auth.login') }}" class="btn primary"
-           style="padding: 18px 36px; font-size: 1.2rem; border-radius: 50px; box-shadow: 0 10px 30px rgba(168,199,255,0.2);">
-            Sign in with Google to Start
-        </a>
-
-        <p class="muted" style="font-size: 0.9rem;">No credit card required. No friction.</p>
+    <div class="panel" style="margin: 40px auto; max-width: 600px; text-align: left; padding: 30px; border-color: rgba(168,199,255,0.2); background: rgba(168,199,255,0.03);">
+        <h2 style="font-size: 1rem; margin: 0 0 20px; text-transform: uppercase; letter-spacing: 2px; color: var(--link); opacity: 0.8;">How it works</h2>
+        <div style="display: grid; gap: 20px;">
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <span style="color: var(--link); font-weight: bold; font-family: monospace;">01</span>
+                <p style="margin: 0; color: var(--text);">Answer quick vocabulary trivia sessions (60–90 seconds).</p>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <span style="color: var(--ok); font-weight: bold; font-family: monospace;">02</span>
+                <p style="margin: 0; color: var(--text);">Earn <b>ticks</b> for correct answers and streak milestones.</p>
+            </div>
+            <div style="display: flex; gap: 15px; align-items: flex-start;">
+                <span style="color: var(--warn); font-weight: bold; font-family: monospace;">03</span>
+                <p style="margin: 0; color: var(--text);">Support the best lessons to surface top-tier content for everyone.</p>
+            </div>
+        </div>
     </div>
 
-    <div style="margin-top: 80px; display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 30px;">
-        <div>
-            <h3 style="color: var(--link);">Play Trivia</h3>
-            <p class="muted" style="font-size: 0.9rem;">Test your knowledge and earn "ticks" for every correct answer.</p>
+    <div style="margin-top: 50px; display: flex; flex-direction: column; align-items: center; gap: 20px;">
+        <a href="{{ url_for('auth.login') }}" class="btn primary"
+           style="padding: 20px 48px; font-size: 1.3rem; border-radius: 50px; background: var(--link); color: #000; font-weight: 800; box-shadow: 0 15px 45px rgba(168,199,255,0.3);">
+            Sign in with Google to Start
+        </a>
+        <div style="display: flex; flex-direction: column; gap: 8px;">
+            <p class="muted" style="font-size: 0.9rem; margin: 0;">No credit card required. Pure learning.</p>
+            <p class="muted" style="font-size: 0.8rem; opacity: 0.6;">We use Google for identity only. Your data stays private.</p>
         </div>
-        <div>
-            <h3 style="color: var(--ok);">Build Together</h3>
-            <p class="muted" style="font-size: 0.9rem;">Submit feedback and suggestions to shape the future of the platform.</p>
+    </div>
+
+    <div style="margin-top: 100px; padding-top: 30px; border-top: 1px solid var(--border); font-size: 0.85rem;">
+        <div style="display: flex; gap: 20px; justify-content: center; margin-bottom: 10px;">
+            <a href="/about" class="muted">About</a>
+            <a href="/privacy" class="muted">Privacy</a>
+            <a href="/terms" class="muted">Terms</a>
+            <a href="mailto:hello@fluenzy.org" class="muted">Contact</a>
         </div>
-        <div>
-            <h3 style="color: var(--warn);">Own the Content</h3>
-            <p class="muted" style="font-size: 0.9rem;">Participate in the community economy and back your favorite curricula.</p>
-        </div>
+        <p class="muted" style="opacity: 0.5;">© 2026 Fluenzy. Built with care; iterated in public.</p>
     </div>
 </div>
 {% endblock %}

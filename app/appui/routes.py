@@ -35,9 +35,18 @@ def _get_subscription():
 
 @bp.before_request
 def require_paid_access_for_appui():
-    # Allow logged-out users to see public pages (like public ledger).
-    if not current_user.is_authenticated:
+    # 1. Allow unauthenticated users to see the landing page
+    if request.endpoint in ["main.index", "main.app_home", "auth.login_google"]:
         return None
+
+    if not current_user.is_authenticated:
+        # Redirect to the NEW splash page instead of immediate login flow
+        # return redirect(url_for("main.index"))
+        return redirect(url_for("main.home"))
+
+    # # Allow logged-out users to see public pages (like public ledger).
+    # if not current_user.is_authenticated:
+    #     return None
 
     # Allow these pages even without subscription:
     allowed_endpoints = {

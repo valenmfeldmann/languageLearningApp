@@ -279,14 +279,34 @@ def inject_active_brand():
 
 
 
+# @bp.get("/")
+# def home():
+#     # 1. Detect which brand the user is visiting
+#     # We strip 'www.' and any port numbers to keep the data clean
+#     active_domain = request.host.lower().replace("www.", "").split(":")[0]
+#
+#     # 2. Log the event to your database
+#     # This replaces the need for an external 'log_brand_event' function
+#     new_event = AnalyticsEvent(
+#         event_type="landing_page_view",
+#         entity_type="brand_test",
+#         entity_id=active_domain,
+#         props_json={"referrer": request.referrer}
+#     )
+#     db.session.add(new_event)
+#     db.session.commit()
+#
+#     # 3. Continue with your existing auth flow
+#     return redirect(url_for("auth.login"))
+
+
+
 @bp.get("/")
 def home():
     # 1. Detect which brand the user is visiting
-    # We strip 'www.' and any port numbers to keep the data clean
     active_domain = request.host.lower().replace("www.", "").split(":")[0]
 
-    # 2. Log the event to your database
-    # This replaces the need for an external 'log_brand_event' function
+    # 2. Log the event (keep this! It's great for your $200 test data)
     new_event = AnalyticsEvent(
         event_type="landing_page_view",
         entity_type="brand_test",
@@ -296,9 +316,13 @@ def home():
     db.session.add(new_event)
     db.session.commit()
 
-    # 3. Continue with your existing auth flow
-    return redirect(url_for("auth.login"))
+    # 3. If they are ALREADY logged in, send them to the app
+    if current_user.is_authenticated:
+        return redirect(url_for("main.app_home"))
 
+    # 4. RENDER the new splash page instead of redirecting
+    # This allows ChatGPT/Gemini to "see" your site's text
+    return render_template("main/index.html", active_domain=active_domain)
 
 
 

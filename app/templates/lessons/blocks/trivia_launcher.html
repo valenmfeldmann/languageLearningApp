@@ -1,20 +1,42 @@
 {# Template for the Trivia Launcher block #}
 {% set p = b.payload_json or {} %}
-<div class="panel-like trivia-launcher-card"
-     style="padding: 24px; text-align: center; border: 1px solid rgba(168,199,255,0.3); border-radius: 16px; background: rgba(168,199,255,0.05); margin: 20px 0;">
-    <div style="font-size: 40px; margin-bottom: 12px;">🏆</div>
-    <h3 style="margin-top: 0; color: var(--link);">{{ p.get("title", "Knowledge Check") }}</h3>
-    <p class="muted" style="margin-bottom: 20px;">
-      {{ p.get("description", "Ready to test what you just learned? Launch a trivia session now.") }}
-    </p>
 
+<style>
+  @keyframes pulse-glow {
+    0% { box-shadow: 0 0 5px rgba(168,199,255,0.2); }
+    50% { box-shadow: 0 0 20px rgba(168,199,255,0.5); }
+    100% { box-shadow: 0 0 5px rgba(168,199,255,0.2); }
+  }
+  .launcher-glow {
+    animation: pulse-glow 3s infinite ease-in-out;
+  }
+</style>
+
+<div class="panel launcher-glow"
+     style="padding: 40px 24px; text-align: center; border: 2px solid var(--link); border-radius: 20px; background: radial-gradient(circle at center, rgba(168,199,255,0.15), rgba(16,20,32,0.8)); margin: 40px 0;">
+
+    <div style="display: inline-block; background: rgba(61,220,151,0.1); border: 1px solid var(--ok); color: var(--ok); padding: 4px 12px; border-radius: 999px; font-size: 12px; font-weight: 800; text-transform: uppercase; margin-bottom: 16px; letter-spacing: 1px;">
+       ✨ Earn Ticks
+    </div>
+
+    <div style="font-size: 52px; margin-bottom: 16px; filter: drop-shadow(0 0 10px var(--link));">🚀</div>
+
+    <h2 style="margin-top: 0; color: #fff; font-size: 24px; letter-spacing: -0.5px;">{{ p.get("title", "Ready for the Challenge?") }}</h2>
+
+    <p class="muted" style="margin: 0 auto 30px; max-width: 400px; line-height: 1.5; font-size: 15px;">
+      {{ p.get("description", "Prove your mastery of this lesson and earn rewards for your portfolio.") }}
+    </p>
 
     <a href="{{ url_for('appui.trivia_page',
                     from_lesson=lesson.code,
                     curriculum=back_to_curriculum,
                     q=p.get('query', '')) }}"
-       class="btn primary" style="padding: 12px 24px; font-size: 16px; text-decoration: none;">
-       Launch Trivia Session &rarr;
+       class="btn primary"
+       style="padding: 16px 40px; font-size: 18px; font-weight: 800; text-decoration: none; background: var(--link); color: #000; border-radius: 12px; box-shadow: 0 10px 25px rgba(168,199,255,0.4); transition: transform 0.2s;">
+       Begin Interactive Session &rarr;
     </a>
 
+    <div class="muted" style="margin-top: 20px; font-size: 12px; opacity: 0.6;">
+        Cognitively optimized sessions that focus on the words you need to review most.
+    </div>
 </div>

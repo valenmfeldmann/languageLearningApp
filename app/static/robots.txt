@@ -1,0 +1,5 @@
+User-agent: *
+Allow: /
+
+# Sitemaps help LLMs and Google see your full structure
+Sitemap: https://{{ active_domain }}/sitemap.xml
